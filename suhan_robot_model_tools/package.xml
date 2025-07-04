@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>suhan_robot_model_tools2</name>
+  <version>0.2.0</version>
+  <description>The suhan_robot_model_tools package for ROS2</description>
+
+  <maintainer email="yoonjh98@snu.ac.kr">Junheon Yoon</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>shape_msgs</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_ros_planning</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>trac_ik_lib</depend>
+  
+  <build_depend>Eigen3</build_depend>
+  <build_depend>pybind11</build_depend>
+  <build_depend>libpcl-dev</build_depend>
+  <build_depend>pcl_conversions</build_depend>
+  
+  <exec_depend>Eigen3</exec_depend>
+  <exec_depend>pybind11</exec_depend>
+  <exec_depend>python3</exec_depend>
+  <exec_depend>ament_cmake_python</exec_depend>
+  <exec_depend>libpcl-dev</exec_depend>
+  <exec_depend>pcl_conversions</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: dyros_robot_controller
+    relative_path: robot/husky_fr3.urdf
+  srdf:
+    relative_path: config/husky_fr3.srdf
+  package_settings:
+    author_name: yeonguk
+    author_email: yeonguk@kw.ac.kr
+    generated_timestamp: 1751334747
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
