@@ -20,6 +20,11 @@ pip install mujoco-py
 ```
 pip install anytree
 ```
+- other dependencies
+```
+sudo apt install ros-humble-interactive-markers
+sudo apt install ros-humble-visualization-msgs
+```
 ### sampling_based_control
 ```
 sudo apt-get install libyaml-cpp-dev libglfw3-dev
