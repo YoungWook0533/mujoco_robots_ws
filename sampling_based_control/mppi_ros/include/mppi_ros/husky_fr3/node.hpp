@@ -26,6 +26,7 @@ private:
   double dt_ {0.01};
   std::string config_path_;
   std::string urdf_path_;
+  std::string srdf_path_;
   std::string goal_topic_ {"husky_fr3_controller/target_pose"};
   std::string observation_topic_ {"husky_fr3_controller/mppi_observation"};
 

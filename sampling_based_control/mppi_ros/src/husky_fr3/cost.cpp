@@ -6,12 +6,19 @@
 
 namespace husky_fr3_mppi_ros {
 
-HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path)
+// Single constructor requiring SRDF path
+HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path, const std::string& srdf_path)
   : urdf_path_(urdf_path) {
   std::ifstream file(urdf_path_);
   std::stringstream buffer; buffer << file.rdbuf();
   urdf_xml_ = buffer.str();
   robot_model_.init_from_xml(urdf_xml_);
+  // Defaults similar to before (will be overridden by YAML)
+  params_.upper_limits = (Eigen::VectorXd(7) << 2.8973, 1.7628, 2.8973, 3.0718, 2.8973, 3.7525, 2.8973).finished();
+  params_.lower_limits = -params_.upper_limits;
+  params_.ee_frame = "fr3_link8";
+  params_.arm_dof = 7;
+  params_.wheel_dof = 2;
   u_prev_.setZero(params_.arm_dof + params_.wheel_dof);
   q_pin_buf_.resize(params_.arm_dof + params_.wheel_dof);
   q_pin_buf_.setZero();
@@ -24,11 +31,19 @@ HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::stri
     q_pin_buf_.resize(params_.arm_dof + params_.wheel_dof);
     q_pin_buf_.setZero();
   }
+
+  // Initialize collision models from SRDF provided
+  set_srdf_path(srdf_path);
 }
 
 HuskyFr3MppiCost::HuskyFr3MppiCost(const HuskyFr3MppiCost& o)
   : params_(o.params_), u_prev_(o.u_prev_), q_pin_buf_(o.q_pin_buf_), urdf_path_(o.urdf_path_), urdf_xml_(o.urdf_xml_) {
   robot_model_.init_from_xml(urdf_xml_);
+  if (!o.params_.srdf_path.empty()) {
+    robot_model_.init_geometry_from_srdf(o.params_.srdf_path);
+  } else {
+    robot_model_.init_geometry_from_srdf();
+  }
 }
 
 mppi::cost_ptr HuskyFr3MppiCost::create() { return std::make_shared<HuskyFr3MppiCost>(*this); }
@@ -48,6 +63,9 @@ bool HuskyFr3MppiCost::load_config(const std::string& yaml_path) {
     getd("reach_weight", params_.reach_weight);
     getd("max_reach", params_.max_reach);
     getd("min_dist", params_.min_dist);
+    getd("self_collision_weight", params_.self_collision_weight);
+
+    if (cost["srdf_path"]) params_.srdf_path = cost["srdf_path"].as<std::string>();
 
     if (cost["upper_limits"]) {
       auto v = cost["upper_limits"].as<std::vector<double>>();
@@ -79,17 +97,40 @@ bool HuskyFr3MppiCost::load_config(const std::string& yaml_path) {
   }
 }
 
+void HuskyFr3MppiCost::set_srdf_path(const std::string& srdf_path) {
+  params_.srdf_path = srdf_path;
+  init_collision_models();
+}
+
+void HuskyFr3MppiCost::init_collision_models() {
+  // Delegate geometry init to the wrapper; SRDF optional
+  if (!params_.srdf_path.empty()) {
+    robot_model_.init_geometry_from_srdf(params_.srdf_path);
+  } else {
+    robot_model_.init_geometry_from_srdf();
+  }
+}
+
+double HuskyFr3MppiCost::self_collision_cost() {
+  if (params_.self_collision_weight <= 0.0) return 0.0;
+  robot_model_.update_geometry();
+  const std::size_t n = robot_model_.count_self_collisions();
+  return params_.self_collision_weight * static_cast<double>(n);
+}
+
 void HuskyFr3MppiCost::ensure_u_prev_size(const mppi::input_t& u) {
   if (u_prev_.size() != u.size()) u_prev_.setZero(u.size());
 }
 
 void HuskyFr3MppiCost::build_q_from_obs(const mppi::observation_t& x) {
-  const int tail = std::max(0, params_.wheel_dof);
   const int dof = std::max(0, params_.arm_dof);
-  const int nq = dof + tail;
-  if (q_pin_buf_.size() != nq) { q_pin_buf_.resize(nq); }
+  const int nq_model = robot_model_.nq();
+  if (q_pin_buf_.size() != nq_model) { q_pin_buf_.resize(nq_model); }
   q_pin_buf_.setZero();
-  for (int j = 0; j < dof && (3 + j) < (int)x.size(); ++j) q_pin_buf_(j) = x(3 + j);
+  for (int j = 0; j < dof && (3 + j) < (int)x.size() && j < nq_model; ++j) {
+    q_pin_buf_(j) = x(3 + j);
+  }
+  // Remaining entries (wheels or other joints) left at zero
   robot_model_.update_state(q_pin_buf_);
 }
 
@@ -140,6 +181,9 @@ mppi::cost_t HuskyFr3MppiCost::compute_cost(const mppi::observation_t& x, const 
       cost += params_.reach_weight + params_.reach_weight * std::pow(params_.min_dist - distance_vector_.norm(), 2);
     }
   }
+
+  // Self-collision penalty
+  cost += self_collision_cost();
 
   // Input regularization
   cost += params_.regularization * u.squaredNorm();

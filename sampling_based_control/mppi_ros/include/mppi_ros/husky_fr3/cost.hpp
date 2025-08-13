@@ -17,6 +17,11 @@ struct CostParams {
   double reach_weight;           // constant penalty when violating
   double max_reach;         // meters, configurable via YAML
   double min_dist;          // optional minimum distance (meters)
+
+  // Self-collision
+  double self_collision_weight{0.0}; // penalty added per colliding pair
+  std::string srdf_path;              // SRDF path for disabled pairs and groups
+
   // Joint limits
   Eigen::VectorXd lower_limits; // size 7
   Eigen::VectorXd upper_limits; // size 7
@@ -29,7 +34,8 @@ struct CostParams {
 
 class HuskyFr3MppiCost : public mppi::Cost {
 public:
-  HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path);
+  // Single constructor requiring SRDF path
+  HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path, const std::string& srdf_path);
   HuskyFr3MppiCost(const HuskyFr3MppiCost& o);
   mppi::cost_ptr create() override;
   mppi::cost_ptr clone() const override;
@@ -38,6 +44,9 @@ public:
   // Load weights and joint limits from a YAML file. Returns true on success.
   bool load_config(const std::string& yaml_path);
 
+  // Override SRDF path at runtime (e.g., from launch) and rebuild collision models
+  void set_srdf_path(const std::string& srdf_path);
+
 private:
   // Helpers to keep compute_cost clean
   void ensure_u_prev_size(const mppi::input_t& u);
@@ -45,7 +54,11 @@ private:
   void compute_ee_world_pose(const mppi::observation_t& x, Eigen::Vector3d& p_world, Eigen::Quaterniond& q_world);
   void parse_reference_pose(const mppi::reference_t& ref, Eigen::Vector3d& ref_t, Eigen::Quaterniond& ref_q) const;
 
-  mppi_pinocchio::RobotModel robot_model_; // per-instance
+  // Collision helpers (implemented using mppi_pinocchio::RobotModel)
+  void init_collision_models();
+  double self_collision_cost();
+
+  mppi_pinocchio::RobotModel robot_model_; // per-instance (FK and collisions)
   CostParams params_;
   Eigen::VectorXd u_prev_;
   // Reusable buffer for Pinocchio configuration vector

@@ -9,6 +9,12 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <memory>
+#include <string>
+
+// Geometry & SRDF support
+#include <pinocchio/multibody/model.hpp>
+#include <pinocchio/multibody/data.hpp>
+#include <pinocchio/algorithm/geometry.hpp>
 
 namespace mppi_pinocchio {
 
@@ -32,62 +38,52 @@ class RobotModel {
 
   RobotModel(const RobotModel& rhs);
   /**
-   *
-   * @param robot_description
-   * @return
+   * Build kinematic model from URDF XML string.
    */
   bool init_from_xml(const std::string& robot_description);
 
   /**
-   *
-   * @param q
+   * Initialize geometry model for collision checking using stored URDF XML.
+   * Optionally apply SRDF to disable collision pairs/reference configs.
    */
-  void update_state(const Eigen::VectorXd& q);
+  bool init_geometry_from_srdf(const std::string& srdf_path = std::string());
 
-  /**
-   *
-   * @param q
-   * @param qd
-   */
+  /** Update kinematics only */
+  void update_state(const Eigen::VectorXd& q);
+  /** Update kinematics with velocities */
   void update_state(const Eigen::VectorXd& q, Eigen::VectorXd& qd);
 
-  /**
-   *
-   * @param from_frame
-   * @param to_frame
-   * @param error
-   */
+  /** Update geometry placements after calling update_state */
+  void update_geometry();
+
+  /** Count current self-collision pairs (after update_geometry) */
+  std::size_t count_self_collisions() const;
+
+  /** Return nq (configuration vector size) */
+  int nq() const;
+
   void get_error(const std::string& from_frame, const std::string& to_frame,
                  Vector6d& error) const;
-  /**
-   *
-   * @param frame
-   * @param rot
-   * @param trans
-   * @param error
-   */
   void get_error(const std::string& frame, const Eigen::Quaterniond& rot,
                  const Eigen::Vector3d& trans, Vector6d& error) const;
 
-  /**
-   *
-   * @param from_frame
-   * @param to_frame
-   * @param offset
-   */
   void get_offset(const std::string& from_frame, const std::string& to_frame,
                   Eigen::Vector3d& offset);
 
-  /**
-   *
-   * @param frame
-   */
   Pose get_pose(const std::string& frame) const;
 
   void print_info() const;
 
  private:
-  pinocchio::Model* model_;
-  pinocchio::Data* data_;
+  // Kinematics
+  pinocchio::Model* model_ {nullptr};
+  pinocchio::Data* data_ {nullptr};
+
+  // Geometry for collision
+  pinocchio::GeometryModel* geom_model_ {nullptr};
+  pinocchio::GeometryData* geom_data_ {nullptr};
+
+  // Cached URDF XML to rebuild geometry
+  std::string urdf_xml_;
 };
 }  // namespace mppi_pinocchio

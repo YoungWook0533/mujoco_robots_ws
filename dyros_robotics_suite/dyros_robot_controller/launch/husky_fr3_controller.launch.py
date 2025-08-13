@@ -22,11 +22,18 @@ def generate_launch_description():
     ],
 )
 
-    urdf_path = os.path.join(
+    urdf_rviz_path = os.path.join(
         pkg_share,
         'robot', 'husky_fr3_vis.urdf')
-    with open(urdf_path, 'r') as infp:
+    with open(urdf_rviz_path, 'r') as infp:
         robot_description = infp.read()
+
+    urdf_path = os.path.join(
+        pkg_share,
+        'robot', 'husky_fr3.urdf')
+    srdf_path = os.path.join(
+        pkg_share,
+        'robot', 'fr3_husky.srdf')
 
     rviz_config_file = os.path.join(
         pkg_share,
@@ -43,16 +50,15 @@ def generate_launch_description():
         name='husky_fr3_mppi',
         output='screen',
         parameters=[
-            # Required by ControllerRos
             {'policy_update_rate': 20.0},
             {'reference_update_rate': 10.0},
             {'ros_publish_rate': 20.0},
             {'publish_ros': True},
-            # Husky+FR3 specifics
             {'dt': 0.01},
             {'mppi_config_path': mppi_config_path},
             {'cost_config_path': cost_config_path},
-            {'urdf_path': os.path.join(pkg_share, 'robot', 'husky_fr3.urdf')},
+            {'urdf_path': urdf_path},
+            {'srdf_path': srdf_path},
             {'goal_topic': 'husky_fr3_controller/target_pose'},
             {'observation_topic': 'husky_fr3_controller/mppi_observation'},
         ]

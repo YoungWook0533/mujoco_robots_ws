@@ -20,6 +20,7 @@ HuskyFr3ControllerNode::HuskyFr3ControllerNode(const std::shared_ptr<rclcpp::Nod
   if (!node->has_parameter("mppi_config_path")) node->declare_parameter<std::string>("mppi_config_path", "");
   if (!node->has_parameter("cost_config_path")) node->declare_parameter<std::string>("cost_config_path", "");
   if (!node->has_parameter("urdf_path")) node->declare_parameter<std::string>("urdf_path", "");
+  if (!node->has_parameter("srdf_path")) node->declare_parameter<std::string>("srdf_path", "");
   if (!node->has_parameter("goal_topic")) node->declare_parameter<std::string>("goal_topic", "husky_fr3_controller/target_pose");
   if (!node->has_parameter("observation_topic")) node->declare_parameter<std::string>("observation_topic", "husky_fr3_controller/mppi_observation");
 
@@ -27,6 +28,7 @@ HuskyFr3ControllerNode::HuskyFr3ControllerNode(const std::shared_ptr<rclcpp::Nod
   node->get_parameter("mppi_config_path", config_path_);
   std::string cost_config_path; node->get_parameter("cost_config_path", cost_config_path);
   node->get_parameter("urdf_path", urdf_path_);
+  node->get_parameter("srdf_path", srdf_path_);
   node->get_parameter("goal_topic", goal_topic_);
   node->get_parameter("observation_topic", observation_topic_);
 
@@ -79,7 +81,11 @@ bool HuskyFr3ControllerNode::set_controller(std::shared_ptr<mppi::Solver>& contr
     RCLCPP_ERROR(get_node()->get_logger(), "cost_config_path is empty but required for HuskyFr3MppiCost");
     return false;
   }
-  cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path);
+  if (srdf_path_.empty()) {
+    RCLCPP_ERROR(get_node()->get_logger(), "srdf_path is empty but required for HuskyFr3MppiCost");
+    return false;
+  }
+  cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path, srdf_path_);
 
   auto pol = std::make_shared<mppi::GaussianPolicy>(dyn_local_->get_input_dimension(), cfg);
   auto solver = std::make_shared<mppi::Solver>(dyn_local_, cost_local_, pol, cfg);
