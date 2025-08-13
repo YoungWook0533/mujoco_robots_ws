@@ -16,8 +16,9 @@ def generate_launch_description():
     parameters=[
         {'robot_name': 'fr3_husky'},
         {'controller_class': 'dyros_robot_controller.HuskyFR3Controller'},
-        # Use external MPPI bridge
         {'use_external_mppi': True},
+        {'external_mppi_input_topic': '/input'},
+        {'mppi_observation_topic': 'husky_fr3_controller/mppi_observation'},
     ],
 )
 

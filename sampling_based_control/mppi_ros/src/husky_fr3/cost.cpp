@@ -6,25 +6,17 @@
 
 namespace husky_fr3_mppi_ros {
 
-HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path) : urdf_path_(urdf_path) {
+HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path)
+  : urdf_path_(urdf_path) {
   std::ifstream file(urdf_path_);
   std::stringstream buffer; buffer << file.rdbuf();
   urdf_xml_ = buffer.str();
   robot_model_.init_from_xml(urdf_xml_);
-  // Defaults similar to before
-  params_.upper_limits = (Eigen::VectorXd(7) << 2.8973, 1.7628, 2.8973, 3.0718, 2.8973, 3.7525, 2.8973).finished();
-  params_.lower_limits = -params_.upper_limits;
-  params_.ee_frame = "fr3_link8";
-  params_.arm_dof = 7;
-  params_.wheel_dof = 2;
   u_prev_.setZero(params_.arm_dof + params_.wheel_dof);
-  // Prepare buffer sized to model nq if possible
   q_pin_buf_.resize(params_.arm_dof + params_.wheel_dof);
   q_pin_buf_.setZero();
-}
 
-HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path)
-  : HuskyFr3MppiCost(urdf_path) {
+  // Always load YAML config; user guaranteed to provide a valid path
   if (!cost_config_path.empty()) {
     load_config(cost_config_path);
     // resize u_prev_ and buffer according to possibly updated dofs
@@ -91,7 +83,7 @@ void HuskyFr3MppiCost::ensure_u_prev_size(const mppi::input_t& u) {
   if (u_prev_.size() != u.size()) u_prev_.setZero(u.size());
 }
 
-void HuskyFr3MppiCost::build_q_pin_from_observation(const mppi::observation_t& x) {
+void HuskyFr3MppiCost::build_q_from_obs(const mppi::observation_t& x) {
   const int tail = std::max(0, params_.wheel_dof);
   const int dof = std::max(0, params_.arm_dof);
   const int nq = dof + tail;
@@ -119,7 +111,7 @@ mppi::cost_t HuskyFr3MppiCost::compute_cost(const mppi::observation_t& x, const 
   double cost = 0.0;
 
   ensure_u_prev_size(u);
-  build_q_pin_from_observation(x);
+  build_q_from_obs(x);
 
   Eigen::Vector3d p_world; Eigen::Quaterniond q_world;
   compute_ee_world_pose(x, p_world, q_world);

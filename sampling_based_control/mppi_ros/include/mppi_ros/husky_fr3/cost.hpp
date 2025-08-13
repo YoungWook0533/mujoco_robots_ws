@@ -8,15 +8,15 @@
 namespace husky_fr3_mppi_ros {
 
 struct CostParams {
-  double linear_weight{500.0};
-  double angular_weight{300.0};
-  double regularization{1e-2};
-  double vel_regularization{1e-3};
-  double joint_limit_cost{500.0};
+  double linear_weight;
+  double angular_weight;
+  double regularization;
+  double vel_regularization;
+  double joint_limit_cost;
 
-  double reach_weight{0.0};           // constant penalty when violating
-  double max_reach{0.9};         // meters, configurable via YAML
-  double min_dist{0.0};          // optional minimum distance (meters)
+  double reach_weight;           // constant penalty when violating
+  double max_reach;         // meters, configurable via YAML
+  double min_dist;          // optional minimum distance (meters)
   // Joint limits
   Eigen::VectorXd lower_limits; // size 7
   Eigen::VectorXd upper_limits; // size 7
@@ -29,7 +29,6 @@ struct CostParams {
 
 class HuskyFr3MppiCost : public mppi::Cost {
 public:
-  explicit HuskyFr3MppiCost(const std::string& urdf_path);
   HuskyFr3MppiCost(const std::string& urdf_path, const std::string& cost_config_path);
   HuskyFr3MppiCost(const HuskyFr3MppiCost& o);
   mppi::cost_ptr create() override;
@@ -42,7 +41,7 @@ public:
 private:
   // Helpers to keep compute_cost clean
   void ensure_u_prev_size(const mppi::input_t& u);
-  void build_q_pin_from_observation(const mppi::observation_t& x);
+  void build_q_from_obs(const mppi::observation_t& x);
   void compute_ee_world_pose(const mppi::observation_t& x, Eigen::Vector3d& p_world, Eigen::Quaterniond& q_world);
   void parse_reference_pose(const mppi::reference_t& ref, Eigen::Vector3d& ref_t, Eigen::Quaterniond& ref_q) const;
 

@@ -10,9 +10,6 @@ namespace HuskyFR3Controller
         robot_ = std::make_unique<RobotData>(urdf_path, true);
         rd_joint_names_ = robot_->getJointNames();
 
-        // Initialize smoothed input vector to correct size to avoid Eigen size assertion later
-        mppi_applied_u_.setZero(9);
-
         key_sub_ = node_->create_subscription<std_msgs::msg::Int32>(
                     "husky_fr3_controller/mode_input", 10,
                     std::bind(&Controller::keyCallback, this, std::placeholders::_1));
@@ -24,33 +21,11 @@ namespace HuskyFR3Controller
                             std::bind(&Controller::baseVelCallback, this, std::placeholders::_1));
         ee_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>(
                         "husky_fr3_controller/ee_pose", 10);
-
-        // MPPI smoothing param (used for external MPPI input smoothing)
-        try {
-            double alpha_ns = node_->declare_parameter<double>("husky_fr3_controller.mppi_u_smoothing_alpha", mppi_u_smoothing_alpha_);
-            double alpha_plain = node_->declare_parameter<double>("mppi_u_smoothing_alpha", alpha_ns);
-            mppi_u_smoothing_alpha_ = std::clamp(alpha_plain, 0.0, 1.0);
-            RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] MPPI smoothing alpha: %.2f", mppi_u_smoothing_alpha_);
-        } catch(const std::exception& e) {
-            RCLCPP_WARN(node_->get_logger(), "[HuskyFR3Controller] MPPI smoothing param not available: %s", e.what());
-        }
-
-        // External MPPI bridge (always enable publishing/subscribing)
-        (void)node_->declare_parameter<bool>("use_external_mppi", false); // kept for compatibility
-        external_input_topic_ = node_->declare_parameter<std::string>("external_mppi_input_topic", "/input");
-
         mppi_observation_pub_ = node_->create_publisher<std_msgs::msg::Float64MultiArray>(
-            "husky_fr3_controller/mppi_observation", 20);
+                                mppi_observation_topic_, 20);
         mppi_input_sub_ = node_->create_subscription<std_msgs::msg::Float32MultiArray>(
-            external_input_topic_, 10,
-            [this](const std_msgs::msg::Float32MultiArray::SharedPtr msg){
-                std::lock_guard<std::mutex> lk(mppi_ext_u_mutex_);
-                if (msg->data.size() < 9) return;
-                mppi_ext_last_u_.resize(9);
-                for (int i=0;i<9;++i) mppi_ext_last_u_(i) = msg->data[i];
-                mppi_ext_last_u_valid_ = true;
-                mppi_ext_last_u_time_ = this->current_time_;
-            }
+                          external_input_topic_, 10,
+                          std::bind(&Controller::mppiInputCallback, this, std::placeholders::_1)
         );
         RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] Subscribed to external MPPI input topic: %s", external_input_topic_.c_str());
     }
@@ -320,10 +295,6 @@ namespace HuskyFR3Controller
             obs_msg.data[17] = current_time_;
             mppi_observation_pub_->publish(obs_msg);
 
-            // Default: gravity comp and zero wheel cmd to avoid falling when no input
-            torque_mani_desired_ = (robot_->getGravityActuated()).head(7);
-            qdot_mobile_desired_.setZero();
-
             // Apply latest external input if available
             Eigen::VectorXd u_ext;
             bool have_u = false;
@@ -336,27 +307,21 @@ namespace HuskyFR3Controller
             }
             if (have_u && u_ext.size()==9) {
                 // base: v,w -> wheels
-                Vector2d vw; 
-                vw << u_ext(0), u_ext(1);
-                qdot_mobile_desired_ = MobileIK(vw);
+                Vector2d base_vel; 
+                base_vel << u_ext(0), u_ext(1);
+                qdot_mobile_desired_ = MobileIK(base_vel);
 
                 // arm qdot desired in u_ext(2..8)
                 for (int i=0;i<7;++i) qdot_mani_desired_(i) = u_ext(2+i);
 
-                // velocity damping control + gravity
-                Vector7d Kv; Kv.setConstant(10.0);
+                // arm velocity control
                 Vector7d v_err = (qdot_mani_desired_ - qdot_mani_);
-                Vector7d tau = (robot_->getMassMatrixActuated()).block(0,0,7,7) * (Kv.asDiagonal() * v_err)
-                               + (robot_->getGravityActuated()).segment(0,7);
+                Vector7d tau = ManiPDControl(q_mani_, v_err);
                 torque_mani_desired_ = tau;
-
-                // optional smoothing safeguard
-                const double alpha = mppi_u_smoothing_alpha_;
-                if (mppi_applied_u_.size() != 9) {
-                    mppi_applied_u_ = u_ext;
-                } else {
-                    mppi_applied_u_ = (1.0 - alpha) * mppi_applied_u_ + alpha * u_ext;
-                }
+            }
+            else{
+                torque_mani_desired_ = (robot_->getGravityActuated()).head(7);
+                qdot_mobile_desired_.setZero();
             }
         }
         else
@@ -401,11 +366,11 @@ namespace HuskyFR3Controller
 
     void Controller::subtargetPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
     {
-      RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] Target pose received: position=(%.3f, %.3f, %.3f), "
-              "orientation=(%.3f, %.3f, %.3f, %.3f)",
-              msg->pose.position.x, msg->pose.position.y, msg->pose.position.z,
-              msg->pose.orientation.x, msg->pose.orientation.y,
-              msg->pose.orientation.z, msg->pose.orientation.w);
+    //   RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] Target pose received: position=(%.3f, %.3f, %.3f), "
+    //           "orientation=(%.3f, %.3f, %.3f, %.3f)",
+    //           msg->pose.position.x, msg->pose.position.y, msg->pose.position.z,
+    //           msg->pose.orientation.x, msg->pose.orientation.y,
+    //           msg->pose.orientation.z, msg->pose.orientation.w);
       is_goal_pose_changed_ = true;
 
       // Convert to 4x4 homogeneous transform
@@ -448,6 +413,16 @@ namespace HuskyFR3Controller
       ee_pose_msg.pose.orientation.w = q.w();
       
       ee_pose_pub_->publish(ee_pose_msg);
+    }
+
+    void Controller::mppiInputCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lk(mppi_ext_u_mutex_);
+        if (msg->data.size() < 9) return;
+        mppi_ext_last_u_.resize(9);
+        for (int i=0;i<9;++i) mppi_ext_last_u_(i) = msg->data[i];
+        mppi_ext_last_u_valid_ = true;
+        mppi_ext_last_u_time_ = this->current_time_;
     }
 
     VectorXd Controller::ManiPDControl(const VectorXd& q_mani_desired, const VectorXd& qdot_mani_desired)

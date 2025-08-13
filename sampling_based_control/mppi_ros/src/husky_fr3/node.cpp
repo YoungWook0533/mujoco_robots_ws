@@ -72,17 +72,14 @@ bool HuskyFr3ControllerNode::set_controller(std::shared_ptr<mppi::Solver>& contr
   // Use stable velocity-driven dynamics (v,w,qdot_des)
   dyn_local_ = std::make_shared<HuskyFr3MppiDynamics>(dt_);
 
-  // Load cost params from separate cost_config_path if set; otherwise, try to load from the MPPI config file (supports a 'cost' section)
+  // Require cost_config_path and construct cost with it
   std::string cost_config_path;
   get_node()->get_parameter("cost_config_path", cost_config_path);
-  if (!cost_config_path.empty()) {
-    cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path);
-  } else {
-    cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_);
-    if (auto specific = std::dynamic_pointer_cast<HuskyFr3MppiCost>(cost_local_)) {
-      specific->load_config(config_path_);
-    }
+  if (cost_config_path.empty()) {
+    RCLCPP_ERROR(get_node()->get_logger(), "cost_config_path is empty but required for HuskyFr3MppiCost");
+    return false;
   }
+  cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path);
 
   auto pol = std::make_shared<mppi::GaussianPolicy>(dyn_local_->get_input_dimension(), cfg);
   auto solver = std::make_shared<mppi::Solver>(dyn_local_, cost_local_, pol, cfg);

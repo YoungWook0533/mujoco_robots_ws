@@ -90,6 +90,7 @@ namespace HuskyFR3Controller
         void subtargetPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr);
         void baseVelCallback(const geometry_msgs::msg::Twist::SharedPtr);
         void pubEEPoseCallback();
+        void mppiInputCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg);
         void computeSlowLoop();
 
         // ====================================================================================
@@ -157,15 +158,12 @@ namespace HuskyFR3Controller
         Vector7d torque_mani_desired_;
         Vector2d qdot_mobile_desired_;
 
-        // Input smoothing to reduce trembling
-        Eigen::VectorXd mppi_applied_u_; // smoothed version of last external u
-        double mppi_u_smoothing_alpha_{0.2};
-
         // External MPPI bridge
         bool use_external_mppi_{false};
         rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr mppi_observation_pub_;
         rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr mppi_input_sub_;
         std::string external_input_topic_{"/input"};
+        std::string mppi_observation_topic_{"husky_fr3_controller/mppi_observation"};
         std::mutex mppi_ext_u_mutex_;
         Eigen::VectorXd mppi_ext_last_u_; // size 9
         bool mppi_ext_last_u_valid_{false};
