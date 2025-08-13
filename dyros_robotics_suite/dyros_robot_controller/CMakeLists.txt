@@ -82,7 +82,10 @@ ament_target_dependencies(husky_dual_fr3_controller PUBLIC
   install(PROGRAMS    dyros_robot_controller/husky_fr3_controller/ros2_qt_gui.py
           DESTINATION lib/${PROJECT_NAME}
           RENAME      HuskyFR3ControllerQT)
-    
+
+  install(PROGRAMS    dyros_robot_controller/husky_fr3_controller/interactive_marker.py
+          DESTINATION lib/${PROJECT_NAME}
+          RENAME      HuskyFR3InteractiveMarker)
     
   install(PROGRAMS    dyros_robot_controller/husky_controller/ros2_qt_gui.py
           DESTINATION lib/${PROJECT_NAME}

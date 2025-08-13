@@ -92,6 +92,18 @@ def generate_launch_description():
         emulate_tty=True,
     )
 
+    # Interactive marker for EE goal -> publishes PoseStamped to goal_topic
+    interactive_marker_node = Node(
+        package='dyros_robot_controller',
+        executable='HuskyFR3InteractiveMarker',
+        name='husky_fr3_interactive_marker',
+        output='screen',
+        parameters=[
+            {'frame_id': 'world'},
+            {'goal_topic': 'husky_fr3_controller/target_pose'},
+        ]
+    )
+
     return LaunchDescription([
         sim_node,
         mppi_node,
@@ -99,4 +111,5 @@ def generate_launch_description():
         joint_state_publisher,
         rviz_node,
         gui_node,
+        interactive_marker_node,
     ])

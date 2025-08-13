@@ -252,6 +252,7 @@ void Solver::sample_trajectories_batch(dynamics_ptr& dynamics, cost_ptr& cost,
   }
 }
 
+// Sampling of the control inputs
 void Solver::sample_trajectories() {
   policy_->shift(t0_internal_);
   policy_->update_samples(weights_, cached_rollouts_);

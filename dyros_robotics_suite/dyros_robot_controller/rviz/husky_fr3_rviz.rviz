@@ -7,7 +7,7 @@ Panels:
         - /Global Options1
         - /Status1
         - /TF1/Frames1
-        - /Pose1
+        - /Pose2
       Splitter Ratio: 0.5
     Tree Height: 1123
   - Class: rviz_common/Selection
@@ -273,7 +273,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /husky_fr3_controller/ee_pose
+        Value: /goal_pose
       Value: false
     - Alpha: 1
       Axes Length: 0.15000000596046448
@@ -337,6 +337,15 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /husky_fr3_controller/optimal_trajectory
       Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Enable Transparency: true
+      Enabled: true
+      Interactive Markers Namespace: /simple_marker
+      Name: InteractiveMarkers
+      Show Axes: false
+      Show Descriptions: true
+      Show Visual Aids: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -383,25 +392,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 6.0181498527526855
+      Distance: 6.569565296173096
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.3464585840702057
-        Y: 0.028885381296277046
-        Z: 0.696393609046936
+        X: 0.6809632778167725
+        Y: 0.11042322963476181
+        Z: 0.8924094438552856
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.3153989911079407
+      Pitch: 0.31539854407310486
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.753593921661377
+      Yaw: 4.888599395751953
     Saved: ~
 Window Geometry:
   Displays:
