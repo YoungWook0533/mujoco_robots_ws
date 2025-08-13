@@ -132,12 +132,12 @@ namespace HuskyDualFR3Controller
         current_time_ = current_time;
 
         q_virtual_.head(2) = sensors_dict.at("position_sensor").head(2);
-        Quaterniond q(sensors_dict.at("orientation_sensor")(0),
+        Quaterniond quat(sensors_dict.at("orientation_sensor")(0),
                       sensors_dict.at("orientation_sensor")(1),
                       sensors_dict.at("orientation_sensor")(2),
                       sensors_dict.at("orientation_sensor")(3));
-        Vector3d euler_zyx = q.toRotationMatrix().eulerAngles(2, 1, 0);
-        q_virtual_(2) = euler_zyx(0);
+        Vector3d euler_rpy = DyrosMath::rot2Euler(quat.toRotationMatrix());
+        q_virtual_(2) = euler_rpy(0);
         q_virtual_tmp_ << q_virtual_(0), q_virtual_(1), cos(q_virtual_(2)), sin(q_virtual_(2));
 
         qdot_virtual_.head(2) = sensors_dict.at("linear_velocity_sensor").head(2);
@@ -161,7 +161,7 @@ namespace HuskyDualFR3Controller
 
         VectorXd q_tmp(20);
         VectorXd qdot_tmp(19);
-        q_tmp << q_virtual_tmp_, r_q_mani_, l_q_mani_, q_mobile_;
+        q_tmp << q_virtual_tmp_, l_q_mani_, r_q_mani_, q_mobile_;
         qdot_tmp << qdot_virtual_, r_qdot_mani_, l_qdot_mani_, qdot_mobile_;
         if(!robot_->updateState(q_tmp, qdot_tmp))
         {
@@ -216,7 +216,7 @@ namespace HuskyDualFR3Controller
             Vector7d r_q_mani_target;
             Vector7d l_q_mani_target;
             r_q_mani_target << 0, 0, 0, -M_PI/2, 0, M_PI/2, M_PI/4;
-            l_q_mani_target << 0, 0, 0, -M_PI/2, 0, M_PI/2, -M_PI/4;
+            l_q_mani_target << 0, 0, 0, -M_PI/2, 0, M_PI/2, M_PI/4;
             
             
             r_q_mani_desired_ = DyrosMath::cubicVector<7>(current_time_,

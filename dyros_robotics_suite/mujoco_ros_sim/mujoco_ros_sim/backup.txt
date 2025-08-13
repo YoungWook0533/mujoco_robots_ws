@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+import time
+import numpy as np
+import threading
+import inspect
+import math
+
+import rclpy
+from rclpy.node import Node
+from rcl_interfaces.msg import ParameterDescriptor
+from sensor_msgs.msg import JointState
+
+import mujoco
+import mujoco.viewer
+
+from mujoco_ros_sim.utils import load_mj_model, precise_sleep, load_class, print_table
+
+from sensor_msgs.msg import Image               
+from builtin_interfaces.msg import Time         
+import cv2                                      
+from cv_bridge import CvBridge                  
+
+
+class MujocoSimNode(Node):
+    def __init__(self):
+        super().__init__('mujoco_sim_node')
+        descriptor = ParameterDescriptor(dynamic_typing=True)
+        self.declare_parameter(name='robot_name', descriptor=descriptor)
+        self.declare_parameter(name='controller_class', descriptor=descriptor)
+        robot_name = self.get_parameter('robot_name').get_parameter_value().string_value
+        controller_class_str = self.get_parameter('controller_class').get_parameter_value().string_value
+        
+        self.joint_state_pub = self.create_publisher(JointState, 'joint_states', 10)
+        # -------- camera topic publisher -------------------------------------------------
+        self.r_realsense_pub = self.create_publisher(Image, f'/{robot_name}/r_realsense/image_raw', 10)
+        self.l_realsense_pub  = self.create_publisher(Image, f'/{robot_name}/l_realsense/image_raw',  10)
+        # self.world_cam_front_pub  = self.create_publisher(Image, f'/{robot_name}/worldcamera_front/image_raw',  10)
+        self.r_realsense_depth_pub = self.create_publisher(Image, f'/{robot_name}/r_realsense/depth', 10)
+        self.l_realsense_depth_pub = self.create_publisher(Image, f'/{robot_name}/l_realsense/depth', 10)
+        
+        self.create_timer(0.01, self.pubJointStateCallback)
+
+        self.mj_model = load_mj_model(robot_name)
+        print_table(self, self.mj_model)
+        self.mj_data = mujoco.MjData(self.mj_model)
+        self.dt = self.mj_model.opt.timestep
+        self.viewer_fps = 60.0
+        self.camera_fps = 30.0
+        
+        self.joint_dict = {}
+        self.joint_dict["joint_names"] = []
+        self.joint_dict["jname_to_jid"] = {}
+        for i in range(self.mj_model.njnt):
+            name_adr = self.mj_model.name_jntadr[i]
+            jname = self.mj_model.names[name_adr:].split(b'\x00', 1)[0].decode('utf-8')
+            if not jname:
+                continue
+            self.joint_dict["joint_names"].append(jname)
+            self.joint_dict["jname_to_jid"][jname] = i
+            
+        self.joint_dict["actuator_names"] = []
+        self.joint_dict["aname_to_aid"] = {}
+        for i in range(self.mj_model.nu):
+            name_adr = self.mj_model.name_actuatoradr[i]
+            aname = self.mj_model.names[name_adr:].split(b'\x00', 1)[0].decode('utf-8')
+            self.joint_dict["actuator_names"].append(aname)
+            self.joint_dict["aname_to_aid"][aname] = i
+                            
+        self.sensor_names: list[str] = []
+        self.sensor_adr:   list[int] = []
+        self.sensor_dim:   list[int] = []
+
+        for i in range(self.mj_model.nsensor):
+            name_adr = self.mj_model.name_sensoradr[i]
+            sname = self.mj_model.names[name_adr:].split(b'\x00', 1)[0].decode('utf-8')
+
+            self.sensor_names.append(sname)
+            self.sensor_adr.append(int(self.mj_model.sensor_adr[i]))
+            self.sensor_dim.append(int(self.mj_model.sensor_dim[i]))
+            
+        self.state_lock = threading.Lock()
+        self.pos_dict, self.vel_dict, self.tau_ext_dict = {}, {}, {}
+        self.sensor_dict = {}
+        
+        Controller = load_class(controller_class_str)
+        if Controller is not None:
+            if inspect.isclass(Controller):
+                # ── Python controller ─────────────────────────────
+                self.controller = Controller(self, self.dt, self.joint_dict)
+            else:
+                # ── C++ Boost.Python factory ────────────────────
+                self.controller = Controller(self.dt, self.joint_dict)
+            self.get_logger().info(f"Sim node with controller={controller_class_str}")
+        else:
+            self.controller = None
+
+        self.is_starting = True
+
+        # -------- camera initialization -------------------------------------------------
+        self.bridge = CvBridge()
+        self.r_realsense_camera_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "r_realsense_camera")
+        self.l_realsense_camera_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "l_realsense_camera")
+        # self.world_cam_front_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "worldcamera_front")
+
+        # self.wide_renderer = mujoco.Renderer(self.mj_model, width=1280, height=720)
+        # self.rgb_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        # self.depth_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        # self.depth_renderer.enable_depth_rendering()
+
+        self.thread = threading.Thread(target=lambda: rclpy.spin(self), daemon=True)
+        self.thread.start()
+        self.cam_thread = threading.Thread(target=self._camera_loop, daemon=True)
+        self.cam_thread.start()
+
+    # --------------------------------------------------------------------------
+    def _make_renderer(self, width=640, height=480):
+        """
+        Create a MuJoCo off‑screen renderer *in the calling thread*.
+        Each thread needs its own GL context, so never share renderers
+        across threads.
+        """
+        return mujoco.Renderer(self.mj_model, width=width, height=height)
+
+    def _copy_sim_state(self):
+        """
+        Return a *read‑only* clone of mjData that lives in the
+        calling thread.  Works on every MuJoCo wheel.
+        """
+        dst = mujoco.MjData(self.mj_model)
+
+        with self.state_lock:
+            if hasattr(mujoco, "mj_copyData"):
+                mujoco.mj_copyData(dst, self.mj_model, self.mj_data)
+                return dst
+
+            # --- Fallback for older wheels -------------------------
+            dst.qpos[:] = self.mj_data.qpos
+            dst.qvel[:] = self.mj_data.qvel
+            dst.act [:] = self.mj_data.act
+            # any other state you need (ctrl, mocap, …) copy here
+
+        # Re‑compute all derived quantities so the renderer sees the same pose
+        mujoco.mj_forward(self.mj_model, dst)
+        return dst
+
+    
+    def _camera_loop(self):
+        """Runs in its own thread at self.camera_fps."""
+        self.rgb_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        self.depth_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        self.depth_renderer.enable_depth_rendering()
+        rate = 1.0 / self.camera_fps
+        next_t = time.perf_counter()
+
+        while rclpy.ok():                                 # exit when ROS shuts down
+            # ---- Sync local copy of sim state ---------------------------------
+            data_copy = self._copy_sim_state()
+
+            # ---- Right camera --------------------------------------------------
+            self.rgb_renderer.update_scene(data_copy, camera=self.r_realsense_camera_id)
+            r_rgb_frame = self.rgb_renderer.render()
+
+            self.depth_renderer.update_scene(data_copy, camera=self.r_realsense_camera_id)
+            r_depth_frame = self.depth_renderer.render()
+
+            # ---- Left camera ---------------------------------------------------
+            self.rgb_renderer.update_scene(data_copy, camera=self.l_realsense_camera_id)
+            l_rgb_frame = self.rgb_renderer.render()
+
+            self.depth_renderer.update_scene(data_copy, camera=self.l_realsense_camera_id)
+            l_depth_frame = self.depth_renderer.render()
+
+            # ---- Publish -------------------------------------------------------
+            stamp = self.get_clock().now().to_msg()
+
+            r_msg = self.bridge.cv2_to_imgmsg(r_rgb_frame, encoding="rgb8")
+            r_msg.header.stamp = stamp
+            r_msg.header.frame_id = "r_realsense_frame"
+            self.r_realsense_pub.publish(r_msg)
+
+            r_dmsg = self.bridge.cv2_to_imgmsg(r_depth_frame.astype(np.float32), "32FC1")
+            r_dmsg.header = r_msg.header
+            self.r_realsense_depth_pub.publish(r_dmsg)
+
+            l_msg = self.bridge.cv2_to_imgmsg(l_rgb_frame, encoding="rgb8")
+            l_msg.header.stamp = stamp
+            l_msg.header.frame_id = "l_realsense_frame"
+            self.l_realsense_pub.publish(l_msg)
+
+            l_dmsg = self.bridge.cv2_to_imgmsg(l_depth_frame.astype(np.float32), "32FC1")
+            l_dmsg.header = l_msg.header
+            self.l_realsense_depth_pub.publish(l_dmsg)
+
+            # ---- Sleep until next frame ---------------------------------------
+            next_t += rate
+            time.sleep(max(0.0, next_t - time.perf_counter()))
+
+    # --------------------------------------------------------------------------
+    
+    def run(self):
+        with mujoco.viewer.launch_passive(self.mj_model, self.mj_data,
+                                          show_left_ui=False, show_right_ui=False) as viewer:
+            viewer.sync()
+            last_view_time = 0.0
+            last_cam_pub_time = 0.0
+
+            while viewer.is_running():
+                step_start = time.perf_counter()
+
+                mujoco.mj_step(self.mj_model, self.mj_data)
+                
+                tmp_pos, tmp_vel, tmp_tau_ext = {}, {}, {}
+                for jname in self.joint_dict["joint_names"]:
+                    if "wheel" in jname and not (jname.startswith("front_left") or jname.startswith("front_right")):
+                        continue
+                    jid   = self.joint_dict["jname_to_jid"][jname]
+                    idx_q = self.mj_model.jnt_qposadr[jid]
+                    idx_v = self.mj_model.jnt_dofadr[jid]
+
+                    next_q = (self.mj_model.jnt_qposadr[jid + 1]
+                            if jid + 1 < self.mj_model.njnt else self.mj_model.nq)
+                    next_v = (self.mj_model.jnt_dofadr[jid + 1]
+                            if jid + 1 < self.mj_model.njnt else self.mj_model.nv)
+
+                    nq = next_q - idx_q
+                    nv = next_v - idx_v
+                    
+                    tmp_pos[jname]     = np.copy(self.mj_data.qpos[idx_q : idx_q + nq])
+                    tmp_vel[jname]     = np.copy(self.mj_data.qvel[idx_v : idx_v + nv])
+                    tmp_tau_ext[jname] = np.copy(self.mj_data.qfrc_applied[idx_v : idx_v + nv])
+
+                tmp_sensor = {}
+                for name, adr, dim in zip(self.sensor_names,
+                                          self.sensor_adr,
+                                          self.sensor_dim):
+                    tmp_sensor[name] = np.copy(self.mj_data.sensordata[adr: adr + dim])
+                    
+                with self.state_lock:
+                    self.pos_dict = tmp_pos
+                    self.vel_dict = tmp_vel
+                    self.tau_ext_dict = tmp_tau_ext
+                    self.sensor_dict = tmp_sensor
+
+                if self.controller is not None:
+                    self.controller.updateState(self.pos_dict, self.vel_dict, self.tau_ext_dict, self.sensor_dict, self.mj_data.time)
+                        
+                if self.is_starting:
+                    if self.controller is not None:
+                        self.controller.starting()
+                    self.is_starting = False
+
+                if self.controller is not None:
+                    self.controller.compute()
+                    ctrl_dict = self.controller.getCtrlInput()
+                    
+                    for given_actuator_name, given_ctrl_cmd in ctrl_dict.items():
+                        if given_actuator_name in self.joint_dict["actuator_names"]:
+                            actuator_id = self.joint_dict["actuator_names"].index(given_actuator_name)
+                            self.mj_data.ctrl[actuator_id] = given_ctrl_cmd
+
+
+                sim_time = self.mj_data.time
+                # # ---- Render the RGB image at 30Hz --------------------------
+                # if (sim_time - last_cam_pub_time) >= 1.0 / self.camera_fps:
+                    
+                #     self.rgb_renderer.update_scene(self.mj_data, camera=self.r_realsense_camera_id)
+                #     r_rgb_frame = self.rgb_renderer.render()
+
+                #     self.depth_renderer.update_scene(self.mj_data, camera=self.r_realsense_camera_id)
+                #     r_depth_frame = self.depth_renderer.render()
+
+                #     self.rgb_renderer.update_scene(self.mj_data, camera=self.l_realsense_camera_id)
+                #     l_rgb_frame = self.rgb_renderer.render()
+
+                #     self.depth_renderer.update_scene(self.mj_data, camera=self.l_realsense_camera_id)
+                #     l_depth_frame = self.depth_renderer.render()
+
+                #     # self.renderer.update_scene(self.mj_data, camera=self.world_cam_front_id)
+                #     # rgb_world_front_frame = self.renderer.render()
+
+                #     r_img_msg = self.bridge.cv2_to_imgmsg(r_rgb_frame, encoding="rgb8")
+                #     r_img_msg.header.stamp = self.get_clock().now().to_msg()
+                #     r_img_msg.header.frame_id = "r_realsense_frame"
+                #     self.r_realsense_pub.publish(r_img_msg)
+
+                #     r_depth_msg = self.bridge.cv2_to_imgmsg(r_depth_frame.astype(np.float32), encoding="32FC1")
+                #     r_depth_msg.header = r_img_msg.header
+                #     self.r_realsense_depth_pub.publish(r_depth_msg)
+                    
+                #     l_img_msg = self.bridge.cv2_to_imgmsg(l_rgb_frame, encoding="rgb8")
+                #     l_img_msg.header.stamp = self.get_clock().now().to_msg()
+                #     l_img_msg.header.frame_id = "l_realsense_frame"
+                #     self.l_realsense_pub.publish(l_img_msg)
+
+                #     l_depth_msg = self.bridge.cv2_to_imgmsg(l_depth_frame.astype(np.float32), encoding="32FC1")
+                #     l_depth_msg.header = l_img_msg.header
+                #     self.l_realsense_depth_pub.publish(l_depth_msg)
+
+                #     # world_img_front_msg = self.bridge.cv2_to_imgmsg(rgb_world_front_frame, encoding="rgb8")
+                #     # world_img_front_msg.header.stamp = self.get_clock().now().to_msg()
+                #     # world_img_front_msg.header.frame_id = "world_camera_front_frame"
+                #     # self.world_cam_front_pub.publish(world_img_front_msg)
+                #     last_cam_pub_time = sim_time
+
+
+
+
+                if (sim_time - last_view_time) >= 1.0 / self.viewer_fps:
+                    viewer.sync()
+                    last_view_time = sim_time
+                
+                leftover = self.dt - (time.perf_counter() - step_start)
+                if leftover > 0:
+                    precise_sleep(leftover)
+                    
+    # def pubJointStateCallback(self):
+    #     # Publish joint states
+    #     with self.state_lock:
+    #         if not self.pos_dict:
+    #             return
+    #         positions = []
+    #         velocities = []
+    #         for jname in self.joint_dict["joint_names"]:
+    #             positions.extend(self.pos_dict[jname].tolist())
+    #             velocities.extend(self.vel_dict[jname].tolist())
+    #     msg = JointState()
+    #     msg.header.stamp = self.get_clock().now().to_msg()
+    #     msg.name = self.joint_dict["joint_names"]
+    #     msg.position = positions
+    #     msg.velocity = velocities
+    #     self.joint_state_pub.publish(msg)
+    def pubJointStateCallback(self):
+        with self.state_lock:
+            if not self.pos_dict:
+                return
+            names, pos, vel = [], [], []
+
+            for jname in self.joint_dict["joint_names"]:
+                if jname == "z_base_joint":
+                    continue
+                if "wheel" in jname and not (
+                    jname.startswith("front_left") or
+                    jname.startswith("front_right")):
+                    continue
+                names.append(jname)
+                pos.extend(self.pos_dict[jname].tolist())
+                vel.extend(self.vel_dict[jname].tolist())
+                
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name     = names
+        msg.position = pos
+        msg.velocity = vel
+        self.joint_state_pub.publish(msg)
+
+
+def main(args=None):
+    rclpy.init(args=args)  # Initialize the ROS2 communications.
+    node = MujocoSimNode()  # Create an instance of the simulation node.
+    try:
+        node.run()  # Run the simulation loop.
+    except KeyboardInterrupt:
+        # Exit cleanly on Ctrl+C.
+        pass
+    finally:
+        node.destroy_node()  # Clean up the node.
+        rclpy.shutdown()  # Shutdown the ROS2 communications.
+        
+if __name__ == "__main__":
+    main()

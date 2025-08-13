@@ -115,31 +115,42 @@
                                     <geom class="collision" size="0.19496 0.28 0.6825" pos="-0.2 0 0.8" type="box"/>
                                 </body>
 
+                                <!-- Fake wheels for visualization -->
                                 <body name="front_left_wheel" pos="0.256 0.2854 0.03282">
                                     <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
-                                    <joint name="front_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                                    <joint name="virtual_front_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
                                     <geom class="visual" pos="0 0 0" quat="0 0 0 1" mesh="wheel" material="husky_black"/>
-                                    <geom class="collision" size="0.1651 0.05715" quat="0.707107 0.707106 0 0" type="cylinder"/>
                                 </body>
 
                                 <body name="front_right_wheel" pos="0.256 -0.2854 0.03282">
                                     <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
-                                    <joint name="front_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                                    <joint name="virtual_front_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
                                     <geom class="visual" pos="0 0 0" quat="0 0 0 1" mesh="wheel" material="husky_black"/>
-                                    <geom class="collision" size="0.1651 0.05715" quat="0.707107 0.707106 0 0" type="cylinder"/>
                                 </body>
 
                                 <body name="rear_left_wheel" pos="-0.256 0.2854 0.03282">
                                     <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
-                                    <joint name="rear_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                                    <joint name="virtual_rear_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
                                     <geom class="visual" pos="0 0 0" quat="0 0 0 1" mesh="wheel" material="husky_black"/>
-                                    <geom class="collision" size="0.1651 0.05715" quat="0.707107 0.707106 0 0" type="cylinder"/>
                                 </body>
 
                                 <body name="rear_right_wheel" pos="-0.256 -0.2854 0.03282">
                                     <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
-                                    <joint name="rear_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0" />
+                                    <joint name="virtual_rear_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0" />
                                     <geom class="visual" pos="0 0 0" quat="0 0 0 1" mesh="wheel" material="husky_black"/>
+                                </body>
+
+
+                                <!-- Actual wheels -->
+                                <body name="front_left_wheel_real" pos="0 0.2854 0.03282">
+                                    <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
+                                    <joint name="front_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
+                                    <geom class="collision" size="0.1651 0.05715" quat="0.707107 0.707106 0 0" type="cylinder"/>
+                                </body>
+
+                                <body name="front_right_wheel_real" pos="0 -0.2854 0.03282">
+                                    <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.637" diaginertia="0.04411 0.02467 0.02467"/>
+                                    <joint name="front_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0"/>
                                     <geom class="collision" size="0.1651 0.05715" quat="0.707107 0.707106 0 0" type="cylinder"/>
                                 </body>
                         
@@ -265,15 +276,26 @@
     </sensor>
 
     <equality>
-        <joint name="left_wheels_gear"
-            joint1="front_left_wheel"
-            joint2="rear_left_wheel"
-            polycoef="0 1 0 0 0"/>
+        <joint name="left_gear_front"
+                joint1="front_left_wheel"
+                joint2="virtual_front_left_wheel"
+                polycoef="0 1 0 0 0"/>
 
-        <joint name="right_wheels_gear"
-            joint1="front_right_wheel"
-            joint2="rear_right_wheel"
-            polycoef="0 1 0 0 0"/>
+        <joint name="left_gear_rear"
+                joint1="front_left_wheel"
+                joint2="virtual_rear_left_wheel"
+                polycoef="0 1 0 0 0"/>
+
+        <joint name="right_gear_front"
+                joint1="front_right_wheel"
+                joint2="virtual_front_right_wheel"
+                polycoef="0 1 0 0 0"/>
+
+        <joint name="right_gear_rear"
+                joint1="front_right_wheel"
+                joint2="virtual_rear_right_wheel"
+                polycoef="0 1 0 0 0"/>
     </equality>
+
 
 </mujoco>

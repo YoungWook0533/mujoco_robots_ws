@@ -1,0 +1,38 @@
+# MPPI config for Husky-FR3 minimal integration
+solver:
+  rollouts: 64
+  lambda: 0.1
+  h: 10.0
+  step_size: 0.015
+  horizon: 1.0
+  caching_factor: 0.3
+  substeps: 1
+
+  gradient_step_size: 1.0
+  momentum_step_size: 0.0
+  adaptive_sampling: false
+  input_variance: [0.05, 0.05, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+
+  cost_ratio: 0.2
+  discount_factor: 1.0
+
+  verbose: false
+  debug_print: false
+
+  bound_input: true
+  u_min: [-1.0, -2.0, -1.5, -1.5, -1.5, -1.5, -1.5, -1.5, -1.5]
+  u_max: [ 1.0,  2.0,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5]
+
+  filtering: false
+  filters_window: [7,7,7,7,7,7,7,7,7]
+  filters_order:  [1,1,1,1,1,1,1,1,1]
+
+  threads: 16
+  logging: false
+
+  spline_degree: 3
+  spline_dt: 0.1
+  spline_verbose: 0.0
+  spline_step_size: 0.1
+
+  display_update_freq: false

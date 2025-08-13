@@ -19,7 +19,7 @@ def generate_launch_description():
 
     urdf_path = os.path.join(
         get_package_share_directory('dyros_robot_controller'),
-        'robot', 'husky_dual_fr3_vis.urdf')
+        'robot', 'husky_dual_fr3.urdf')
     with open(urdf_path, 'r') as infp:
         robot_description = infp.read()
     # moveit_config_path = get_package_share_directory('husky_fr3_moveit_config')

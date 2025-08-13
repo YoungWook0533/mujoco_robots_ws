@@ -15,6 +15,11 @@ import mujoco.viewer
 
 from mujoco_ros_sim.utils import load_mj_model, precise_sleep, load_class, print_table
 
+from sensor_msgs.msg import Image               
+from builtin_interfaces.msg import Time         
+import cv2                                      
+from cv_bridge import CvBridge                  
+
 
 class MujocoSimNode(Node):
     def __init__(self):
@@ -26,6 +31,14 @@ class MujocoSimNode(Node):
         controller_class_str = self.get_parameter('controller_class').get_parameter_value().string_value
         
         self.joint_state_pub = self.create_publisher(JointState, 'joint_states', 10)
+        # # -------- camera topic publisher -------------------------------------------------
+        # self.r_realsense_pub = self.create_publisher(Image, f'/{robot_name}/r_realsense/image_raw', 10)
+        # self.l_realsense_pub  = self.create_publisher(Image, f'/{robot_name}/l_realsense/image_raw',  10)
+        
+        # self.r_realsense_depth_pub = self.create_publisher(Image, f'/{robot_name}/r_realsense/depth', 10)
+        # self.l_realsense_depth_pub = self.create_publisher(Image, f'/{robot_name}/l_realsense/depth', 10)
+
+        # self.mid_camera_pub  = self.create_publisher(Image, f'/{robot_name}/mid_camera/image_raw',  10)
         
         self.create_timer(0.01, self.pubJointStateCallback)
 
@@ -34,6 +47,7 @@ class MujocoSimNode(Node):
         self.mj_data = mujoco.MjData(self.mj_model)
         self.dt = self.mj_model.opt.timestep
         self.viewer_fps = 60.0
+        self.camera_fps = 30.0
         
         self.joint_dict = {}
         self.joint_dict["joint_names"] = []
@@ -83,6 +97,17 @@ class MujocoSimNode(Node):
             self.controller = None
 
         self.is_starting = True
+
+        # # -------- camera initialization -------------------------------------------------
+        # self.bridge = CvBridge()
+        # self.r_realsense_camera_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "r_realsense_camera")
+        # self.l_realsense_camera_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "l_realsense_camera")
+        # self.mid_camera_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "mid_camera")
+
+        # # self.wide_renderer = mujoco.Renderer(self.mj_model, width=1280, height=720)
+        # self.rgb_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        # self.depth_renderer = mujoco.Renderer(self.mj_model, width=640, height=480)
+        # self.depth_renderer.enable_depth_rendering()
         
         self.thread = threading.Thread(target=lambda: rclpy.spin(self), daemon=True)
         self.thread.start()
@@ -92,6 +117,7 @@ class MujocoSimNode(Node):
                                           show_left_ui=False, show_right_ui=False) as viewer:
             viewer.sync()
             last_view_time = 0.0
+            last_cam_pub_time = 0.0
 
             while viewer.is_running():
                 step_start = time.perf_counter()
@@ -146,8 +172,55 @@ class MujocoSimNode(Node):
                         if given_actuator_name in self.joint_dict["actuator_names"]:
                             actuator_id = self.joint_dict["actuator_names"].index(given_actuator_name)
                             self.mj_data.ctrl[actuator_id] = given_ctrl_cmd
-                            
+
+
                 sim_time = self.mj_data.time
+                # # ---- Render the RGB image at 30Hz --------------------------
+                # if (sim_time - last_cam_pub_time) >= 1.0 / self.camera_fps:
+                    
+                #     self.rgb_renderer.update_scene(self.mj_data, camera=self.r_realsense_camera_id)
+                #     r_rgb_frame = self.rgb_renderer.render()
+
+                #     self.depth_renderer.update_scene(self.mj_data, camera=self.r_realsense_camera_id)
+                #     r_depth_frame = self.depth_renderer.render()
+
+                #     self.rgb_renderer.update_scene(self.mj_data, camera=self.l_realsense_camera_id)
+                #     l_rgb_frame = self.rgb_renderer.render()
+
+                #     self.depth_renderer.update_scene(self.mj_data, camera=self.l_realsense_camera_id)
+                #     l_depth_frame = self.depth_renderer.render()
+
+                #     self.rgb_renderer.update_scene(self.mj_data, camera=self.mid_camera_id)
+                #     mid_rgb_frame = self.rgb_renderer.render()
+
+                #     r_img_msg = self.bridge.cv2_to_imgmsg(r_rgb_frame, encoding="rgb8")
+                #     r_img_msg.header.stamp = self.get_clock().now().to_msg()
+                #     r_img_msg.header.frame_id = "r_realsense_frame"
+                #     self.r_realsense_pub.publish(r_img_msg)
+
+                #     r_depth_msg = self.bridge.cv2_to_imgmsg(r_depth_frame.astype(np.float32), encoding="32FC1")
+                #     r_depth_msg.header = r_img_msg.header
+                #     self.r_realsense_depth_pub.publish(r_depth_msg)
+                    
+                #     l_img_msg = self.bridge.cv2_to_imgmsg(l_rgb_frame, encoding="rgb8")
+                #     l_img_msg.header.stamp = self.get_clock().now().to_msg()
+                #     l_img_msg.header.frame_id = "l_realsense_frame"
+                #     self.l_realsense_pub.publish(l_img_msg)
+
+                #     l_depth_msg = self.bridge.cv2_to_imgmsg(l_depth_frame.astype(np.float32), encoding="32FC1")
+                #     l_depth_msg.header = l_img_msg.header
+                #     self.l_realsense_depth_pub.publish(l_depth_msg)
+
+                #     mid_camera_msg = self.bridge.cv2_to_imgmsg(mid_rgb_frame, encoding="rgb8")
+                #     mid_camera_msg.header.stamp = self.get_clock().now().to_msg()
+                #     mid_camera_msg.header.frame_id = "mid_camera_frame"
+                #     self.mid_camera_pub.publish(mid_camera_msg)
+                    
+                #     last_cam_pub_time = sim_time
+
+
+
+
                 if (sim_time - last_view_time) >= 1.0 / self.viewer_fps:
                     viewer.sync()
                     last_view_time = sim_time
@@ -181,9 +254,10 @@ class MujocoSimNode(Node):
             for jname in self.joint_dict["joint_names"]:
                 if jname == "z_base_joint":
                     continue
-                if "wheel" in jname and not (
-                    jname.startswith("front_left") or
-                    jname.startswith("front_right")):
+                # if "wheel" in jname and not (
+                #     jname.startswith("front_left") or
+                #     jname.startswith("front_right")):
+                if "wheel" in jname:
                     continue
                 names.append(jname)
                 pos.extend(self.pos_dict[jname].tolist())

@@ -10,6 +10,9 @@ namespace HuskyFR3Controller
         robot_ = std::make_unique<RobotData>(urdf_path, true);
         rd_joint_names_ = robot_->getJointNames();
 
+        // Initialize smoothed input vector to correct size to avoid Eigen size assertion later
+        mppi_applied_u_.setZero(9);
+
         key_sub_ = node_->create_subscription<std_msgs::msg::Int32>(
                     "husky_fr3_controller/mode_input", 10,
                     std::bind(&Controller::keyCallback, this, std::placeholders::_1));
@@ -22,43 +25,39 @@ namespace HuskyFR3Controller
         ee_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>(
                         "husky_fr3_controller/ee_pose", 10);
 
-        q_virtual_.setZero();
-        q_virtual_tmp_.setZero();
-        q_virtual_init_.setZero();
-        q_virtual_desired_.setZero();
-        qdot_virtual_.setZero();
-        qdot_virtual_init_.setZero();
-        qdot_virtual_desired_.setZero();
-        
-        q_mani_.setZero();
-        q_mani_init_.setZero();
-        q_mani_desired_.setZero();
-        qdot_mani_.setZero();
-        qdot_mani_init_.setZero();
-        qdot_mani_desired_.setZero();
-        
-        q_mobile_.setZero();
-        q_mobile_init_.setZero();
-        q_mobile_desired_.setZero();
-        qdot_mobile_.setZero();
-        qdot_mobile_init_.setZero();
-        
-        x_.setIdentity();
-        x_init_.setIdentity();
-        x_desired_.setIdentity();
-        xdot_.setZero();
-        xdot_init_.setZero();
-        xdot_desired_.setZero();
+        // MPPI smoothing param (used for external MPPI input smoothing)
+        try {
+            double alpha_ns = node_->declare_parameter<double>("husky_fr3_controller.mppi_u_smoothing_alpha", mppi_u_smoothing_alpha_);
+            double alpha_plain = node_->declare_parameter<double>("mppi_u_smoothing_alpha", alpha_ns);
+            mppi_u_smoothing_alpha_ = std::clamp(alpha_plain, 0.0, 1.0);
+            RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] MPPI smoothing alpha: %.2f", mppi_u_smoothing_alpha_);
+        } catch(const std::exception& e) {
+            RCLCPP_WARN(node_->get_logger(), "[HuskyFR3Controller] MPPI smoothing param not available: %s", e.what());
+        }
 
-        mobile_vel_desired_.setZero();
-        
-        torque_mani_desired_.setZero();
-        qdot_mobile_desired_.setZero();
+        // External MPPI bridge (always enable publishing/subscribing)
+        (void)node_->declare_parameter<bool>("use_external_mppi", false); // kept for compatibility
+        external_input_topic_ = node_->declare_parameter<std::string>("external_mppi_input_topic", "/input");
+
+        mppi_observation_pub_ = node_->create_publisher<std_msgs::msg::Float64MultiArray>(
+            "husky_fr3_controller/mppi_observation", 20);
+        mppi_input_sub_ = node_->create_subscription<std_msgs::msg::Float32MultiArray>(
+            external_input_topic_, 10,
+            [this](const std_msgs::msg::Float32MultiArray::SharedPtr msg){
+                std::lock_guard<std::mutex> lk(mppi_ext_u_mutex_);
+                if (msg->data.size() < 9) return;
+                mppi_ext_last_u_.resize(9);
+                for (int i=0;i<9;++i) mppi_ext_last_u_(i) = msg->data[i];
+                mppi_ext_last_u_valid_ = true;
+                mppi_ext_last_u_time_ = this->current_time_;
+            }
+        );
+        RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] Subscribed to external MPPI input topic: %s", external_input_topic_.c_str());
     }
 
     Controller::~Controller()
     {
-
+        // no internal MPPI threads to join
     }
 
     void Controller::starting()
@@ -214,76 +213,151 @@ namespace HuskyFR3Controller
             torque_mani_desired_ = tmp_torque_desired.head(7); 
             qdot_mobile_desired_ = MobileAdmControl(tmp_torque_desired.tail(2));
         }
-        else if(mode_ == "wholebody_impedence")
+        else if (mode_ == "wholebody_impedence")
         {
             Affine3d target_x = x_goal_;
-            // Vector6d x_error;
-            // x_error.head(3) = target_x.translation() - x_.translation();
-            // x_error.tail(3) = DyrosMath::getPhi(target_x.rotation(), x_.rotation());
-            
-            // Vector6d Kp, Kv;
-            // Kp << 1,1,1,1,1,1;
-            // Kv << 1,1,1,1,1,1;
-
-            // Vector6d f = Kp.asDiagonal() * x_error - Kv.asDiagonal() * xdot_;
-            // MatrixXd J_tilda = robot_->getJacobianActuated();
-            // VectorXd etadot = (J_tilda.transpose() * J_tilda).inverse() * J_tilda.transpose() * (f);
-            // VectorXd tmp_torque_desired = robot_->getMassMatrixActuated() * etadot + robot_->getGravityActuated();
-
-            // torque_mani_desired_ = tmp_torque_desired.head(7);
-            // // qdot_mobile_desired_ += etadot.tail(2) * dt_;
-            // qdot_mobile_desired_ = MobileAdmControl(tmp_torque_desired.tail(2));
-
-            if(is_goal_pose_changed_)
-            {
+            /* ───────── 1. update cubic reference trajectory ────────── */
+            if (is_goal_pose_changed_) {
                 is_goal_pose_changed_ = false;
                 control_start_time_ = current_time_;
-                x_init_ = x_;
+                x_init_  = x_;
                 xdot_init_ = xdot_;
             }
+
             x_desired_.translation() = DyrosMath::cubicVector<3>(current_time_,
-                                                                 control_start_time_,
-                                                                 control_start_time_ + 4,
-                                                                 x_init_.translation(),
-                                                                 target_x.translation(),
-                                                                 xdot_init_.head(3),
-                                                                 Vector3d::Zero());
+                                                                control_start_time_,
+                                                                control_start_time_ + 4.0,
+                                                                x_init_.translation(),
+                                                                target_x.translation(),
+                                                                xdot_init_.head(3),
+                                                                Vector3d::Zero());
             x_desired_.linear() = DyrosMath::rotationCubic(current_time_,
-                                                           control_start_time_,
-                                                           control_start_time_ + 4,
-                                                           x_init_.rotation(),
-                                                           target_x.rotation());
+                                                            control_start_time_,
+                                                            control_start_time_ + 4.0,
+                                                            x_init_.rotation(),
+                                                            target_x.rotation());
             xdot_desired_.head(3) = DyrosMath::cubicDotVector<3>(current_time_,
-                                                                 control_start_time_,
-                                                                 control_start_time_ + 4,
-                                                                 x_init_.translation(),
-                                                                 target_x.translation(),
-                                                                 xdot_init_.head(3),
-                                                                 Vector3d::Zero());
+                                                                control_start_time_,
+                                                                control_start_time_ + 4.0,
+                                                                x_init_.translation(),
+                                                                target_x.translation(),
+                                                                xdot_init_.head(3),
+                                                                Vector3d::Zero());
             xdot_desired_.tail(3) = DyrosMath::rotationCubicDot(current_time_,
-                                                                 control_start_time_,
-                                                                 control_start_time_ + 4,
-                                                                 Vector3d::Zero(),
-                                                                 Vector3d::Zero(),
-                                                                 x_init_.rotation(),
-                                                                 target_x.rotation());
-            Vector6d x_error, xdot_error;
-            x_error.head(3) = x_desired_.translation() - x_.translation();
-            x_error.tail(3) = DyrosMath::getPhi(x_desired_.rotation(), x_.rotation());
-            xdot_error = xdot_desired_ - xdot_;
+                                                                control_start_time_,
+                                                                control_start_time_ + 4.0,
+                                                                Vector3d::Zero(),
+                                                                Vector3d::Zero(),
+                                                                x_init_.rotation(),
+                                                                target_x.rotation());
 
+            /* ───────── 2. operational-space impedance wrench ───────── */
             Vector6d Kp, Kv;
-            Kp << 10,10,10,1,1,1;
-            Kv << 1,1,1,1,1,1;
+            Kp << 50,50,50,50,50,50;
+            Kv <<  10,10,10,10,10,10;
 
-            Vector6d f = Kp.asDiagonal() * x_error - Kv.asDiagonal() * xdot_;
-            MatrixXd J_tilda = robot_->getJacobianActuated();
-            VectorXd etadot = (J_tilda.transpose() * J_tilda).inverse() * J_tilda.transpose() * (f);
-            VectorXd tmp_torque_desired = robot_->getMassMatrixActuated() * etadot + robot_->getGravityActuated();
+            Vector6d x_err;
+            x_err.head(3) = x_desired_.translation() - x_.translation();
+            x_err.tail(3) = DyrosMath::getPhi(x_desired_.rotation(), x_.rotation());
 
-            torque_mani_desired_ = tmp_torque_desired.head(7);
-            // qdot_mobile_desired_ += etadot.tail(2) * dt_;
-            qdot_mobile_desired_ = MobileAdmControl(tmp_torque_desired.tail(2));
+            Vector6d f =  Kp.asDiagonal() * x_err - Kv.asDiagonal() * xdot_;
+
+            /* ───────── 3. primary joint acceleration ----------------- */
+            MatrixXd J  = robot_->getJacobianActuated();
+            MatrixXd Jpinv = (J.transpose()*J).ldlt().solve(J.transpose());
+            VectorXd etadot_primary = Jpinv * f;
+
+            /* ───────── 4. manipulability-gradient (arm 7-DoF) -------- */
+            auto manipulability = [&](const Vector7d& q)->double
+            {
+                MatrixXd J_arm = J.leftCols(7);                 // 6 × 7
+                double det = (J_arm * J_arm.transpose()).determinant();
+                return std::sqrt(std::max(det, 0.0));
+            };
+            const double h = 1e-4;
+            double w0 = manipulability(q_mani_);
+            Vector7d gradH;
+            for (int i=0;i<7;++i){
+                Vector7d qpert = q_mani_;
+                qpert(i) += h;
+                gradH(i) = (manipulability(qpert) - w0)/h;
+            }
+
+            /* wheel side: simple damping gradient (drive them to 0) */
+            Vector2d gradWheel = -qdot_mobile_;
+
+            VectorXd gradH_full(9);
+            gradH_full << gradH, gradWheel;
+
+            /* ───────── 5. project into Jacobian null-space ------------ */
+            MatrixXd N = MatrixXd::Identity(9,9) - Jpinv * J;   // 9 × 9
+            double k_null = 2.0;                                // tuning gain
+            VectorXd etadot_null = k_null * (N * gradH_full);   // 9 × 1
+
+            /* total desired joint acceleration */
+            VectorXd etadot = etadot_primary + etadot_null;
+
+            /* ───────── 6. inverse dynamics → torque / wheel accel ----- */
+            VectorXd tmp_tau_des = robot_->getMassMatrixActuated() * etadot + robot_->getGravityActuated();
+
+            torque_mani_desired_ = tmp_tau_des.head(7);
+
+            /* wheels: admittance filter (or integrate etadot directly) */
+            qdot_mobile_desired_ = MobileAdmControl(tmp_tau_des.tail(2));
+        }
+
+        else if (mode_ == "mppi")
+        {
+            // Publish observation
+            std_msgs::msg::Float64MultiArray obs_msg;
+            obs_msg.data.resize(18);
+            // x = [x,y,yaw,q(7),qdot(7)] then time
+            obs_msg.data[0] = q_virtual_(0);
+            obs_msg.data[1] = q_virtual_(1);
+            obs_msg.data[2] = q_virtual_(2);
+            for (int i=0;i<7;++i) obs_msg.data[3+i] = q_mani_(i);
+            for (int i=0;i<7;++i) obs_msg.data[10+i] = qdot_mani_(i);
+            obs_msg.data[17] = current_time_;
+            mppi_observation_pub_->publish(obs_msg);
+
+            // Default: gravity comp and zero wheel cmd to avoid falling when no input
+            torque_mani_desired_ = (robot_->getGravityActuated()).head(7);
+            qdot_mobile_desired_.setZero();
+
+            // Apply latest external input if available
+            Eigen::VectorXd u_ext;
+            bool have_u = false;
+            {
+                std::lock_guard<std::mutex> lk(mppi_ext_u_mutex_);
+                if (mppi_ext_last_u_valid_) {
+                    u_ext = mppi_ext_last_u_;
+                    have_u = true;
+                }
+            }
+            if (have_u && u_ext.size()==9) {
+                // base: v,w -> wheels
+                Vector2d vw; 
+                vw << u_ext(0), u_ext(1);
+                qdot_mobile_desired_ = MobileIK(vw);
+
+                // arm qdot desired in u_ext(2..8)
+                for (int i=0;i<7;++i) qdot_mani_desired_(i) = u_ext(2+i);
+
+                // velocity damping control + gravity
+                Vector7d Kv; Kv.setConstant(40.0);
+                Vector7d v_err = (qdot_mani_desired_ - qdot_mani_);
+                Vector7d tau = (robot_->getMassMatrixActuated()).block(0,0,7,7) * (Kv.asDiagonal() * v_err)
+                               + (robot_->getGravityActuated()).segment(0,7);
+                torque_mani_desired_ = tau;
+
+                // optional smoothing safeguard
+                const double alpha = mppi_u_smoothing_alpha_;
+                if (mppi_applied_u_.size() != 9) {
+                    mppi_applied_u_ = u_ext;
+                } else {
+                    mppi_applied_u_ = (1.0 - alpha) * mppi_applied_u_ + alpha * u_ext;
+                }
+            }
         }
         else
         {
@@ -320,14 +394,14 @@ namespace HuskyFR3Controller
       else if(msg->data == 2) setMode("base_teleop");
       else if(msg->data == 3) setMode("wholebody_grav_comp");
       else if(msg->data == 4) setMode("wholebody_impedence");
+      else if(msg->data == 5) setMode("mppi");
       else                    setMode("none");
   
     }
 
     void Controller::subtargetPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
     {
-      RCLCPP_INFO(node_->get_logger(),
-              "[HuskyFR3Controller] Target pose received: position=(%.3f, %.3f, %.3f), "
+      RCLCPP_INFO(node_->get_logger(), "[HuskyFR3Controller] Target pose received: position=(%.3f, %.3f, %.3f), "
               "orientation=(%.3f, %.3f, %.3f, %.3f)",
               msg->pose.position.x, msg->pose.position.y, msg->pose.position.z,
               msg->pose.orientation.x, msg->pose.orientation.y,

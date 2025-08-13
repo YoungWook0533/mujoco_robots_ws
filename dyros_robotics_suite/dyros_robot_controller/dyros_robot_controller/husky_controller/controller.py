@@ -154,7 +154,7 @@ class HuskyController(ControllerInterface):
         L = 0.2854*2*1.875  # Distance between wheels
         R = 0.1651    # radius of wheels
         base_vel_lim = np.array([1.0, 3.0])  # [linear_vel, angular_vel]
-        base_acc_lim = np.array([2.0, 6.0])  # [linear_acc, angular_acc]
+        base_acc_lim = np.array([5.0, 10.0])  # [linear_acc, angular_acc]
         
         v = target_vel[0]
         w = target_vel[1]
@@ -163,14 +163,18 @@ class HuskyController(ControllerInterface):
         v = np.clip(target_vel[0], -base_vel_lim[0], base_vel_lim[0])
         w = np.clip(target_vel[1], -base_vel_lim[1], base_vel_lim[1])
         
+        delta = np.array([v, w]) - self.base_vel
+        delta = np.clip(delta, -base_acc_lim * self.dt, base_acc_lim * self.dt)
+        v_safe, w_safe = self.base_vel + delta
+        
         # TODO: Limit the linear and angular accelerations 
         # # Limit the linear and angular accelerations
         # v = np.clip((v - self.base_vel[0]) / self.dt, -base_acc_lim[0], base_acc_lim[0]) * self.dt + self.base_vel[0]
         # w = np.clip((w - self.base_vel[1]) / self.dt, -base_acc_lim[1], base_acc_lim[1]) * self.dt + self.base_vel[1]
         # self.node.get_logger().info(f"{(v - self.base_vel[0]) / self.dt}")
         
-        w_left = (v - L/2 * w) / R
-        w_right = (v + L/2 * w) / R
+        w_left = (v_safe - L/2 * w_safe) / R
+        w_right = (v_safe + L/2 * w_safe) / R
         return np.array([w_left, w_right])
     
     def FK(self, wheel_vel: np.ndarray) -> np.ndarray:

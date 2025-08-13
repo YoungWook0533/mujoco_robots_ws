@@ -7,9 +7,14 @@
 #include <std_msgs/msg/int32.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
 
 #include <thread>
+#include <atomic>
+#include <mutex>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "math_type_define.h"
@@ -97,6 +102,7 @@ namespace HuskyFR3Controller
 
     private :
         std::unique_ptr<RobotData> robot_;
+        std::unique_ptr<RobotData> viz_robot_;
         rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr            key_sub_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_sub_;
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr       base_vel_sub_;
@@ -150,5 +156,19 @@ namespace HuskyFR3Controller
         //// control input
         Vector7d torque_mani_desired_;
         Vector2d qdot_mobile_desired_;
+
+        // Input smoothing to reduce trembling
+        Eigen::VectorXd mppi_applied_u_; // smoothed version of last external u
+        double mppi_u_smoothing_alpha_{0.2};
+
+        // External MPPI bridge
+        bool use_external_mppi_{false};
+        rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr mppi_observation_pub_;
+        rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr mppi_input_sub_;
+        std::string external_input_topic_{"/input"};
+        std::mutex mppi_ext_u_mutex_;
+        Eigen::VectorXd mppi_ext_last_u_; // size 9
+        bool mppi_ext_last_u_valid_{false};
+        double mppi_ext_last_u_time_{-1.0};
     };
 } // namespace HuskyFR3Controller

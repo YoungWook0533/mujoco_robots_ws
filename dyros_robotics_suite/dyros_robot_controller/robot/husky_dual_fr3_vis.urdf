@@ -609,7 +609,127 @@
     <origin rpy="0 0 0" xyz="0 0 0.107"/>
     <parent link="r_fr3_link7"/>
     <child link="r_fr3_link8"/>
-  </joint>  
+  </joint> 
+  <joint name="r_fr3_hand_joint" type="fixed">
+    <parent link="r_fr3_link8"/>
+    <child link="r_fr3_hand"/>
+    <origin rpy="0 0 -0.7853981633974483" xyz="0 0 0"/>
+  </joint>
+  <!-- sub-link defining detailed meshes for collision with environment -->
+  <link name="r_fr3_hand">
+    <visual name="r_fr3_hand_visual">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/hand.dae"/>
+      </geometry>
+    </visual>
+    <collision name="r_fr3_hand_collision">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/collision/hand.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.01 0 0.03"/>
+      <mass value="0.73"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0025" iyz="0" izz="0.0017"/>
+    </inertial>
+  </link>
+  <!-- Define the hand_tcp frame -->
+  <link name="r_hand_tcp"/>
+  <joint name="r_hand_tcp_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.1034"/>
+    <parent link="r_fr3_hand"/>
+    <child link="r_hand_tcp"/>
+  </joint>
+  <link name="r_fr3_leftfinger">
+    <visual name="r_fr3_leftfinger_visual">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/finger.dae"/>
+      </geometry>
+    </visual>
+    <!-- screw mount -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 18.5e-3 11e-3"/>
+      <geometry>
+        <box size="22e-3 15e-3 20e-3"/>
+      </geometry>
+    </collision>
+    <!-- cartriage sledge -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 6.8e-3 2.2e-3"/>
+      <geometry>
+        <box size="22e-3 8.8e-3 3.8e-3"/>
+      </geometry>
+    </collision>
+    <!-- diagonal finger -->
+    <collision>
+      <origin rpy="0.5235987755982988 0 0" xyz="0 15.9e-3 28.35e-3"/>
+      <geometry>
+        <box size="17.5e-3 7e-3 23.5e-3"/>
+      </geometry>
+    </collision>
+    <!-- rubber tip with which to grasp -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 7.58e-3 45.25e-3"/>
+      <geometry>
+        <box size="17.5e-3 15.2e-3 18.5e-3"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="r_fr3_rightfinger">
+    <visual name="r_fr3_rightfinger_visual">
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/finger.dae"/>
+      </geometry>
+    </visual>
+    <!-- screw mount -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -18.5e-3 11e-3"/>
+      <geometry>
+        <box size="22e-3 15e-3 20e-3"/>
+      </geometry>
+    </collision>
+    <!-- cartriage sledge -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -6.8e-3 2.2e-3"/>
+      <geometry>
+        <box size="22e-3 8.8e-3 3.8e-3"/>
+      </geometry>
+    </collision>
+    <!-- diagonal finger -->
+    <collision>
+      <origin rpy="-0.5235987755982988 0 0" xyz="0 -15.9e-3 28.35e-3"/>
+      <geometry>
+        <box size="17.5e-3 7e-3 23.5e-3"/>
+      </geometry>
+    </collision>
+    <!-- rubber tip with which to grasp -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -7.58e-3 45.25e-3"/>
+      <geometry>
+        <box size="17.5e-3 15.2e-3 18.5e-3"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- <joint name="fr3_finger_joint1" type="prismatic"> -->
+  <joint name="r_fr3_finger_joint1" type="fixed">
+    <parent link="r_fr3_hand"/>
+    <child link="r_fr3_leftfinger"/>
+    <origin rpy="0 0 0" xyz="0 0 0.0584"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" lower="0.0" upper="0.04" velocity="0.2"/>
+    <dynamics damping="0.3"/>
+  </joint>
+  <!-- <joint name="fr3_finger_joint2" type="prismatic"> -->
+  <joint name="r_fr3_finger_joint2" type="fixed">
+    <parent link="r_fr3_hand"/>
+    <child link="r_fr3_rightfinger"/>
+    <origin rpy="0 0 0" xyz="0 0 0.0584"/>
+    <axis xyz="0 -1 0"/>
+    <limit effort="100" lower="0.0" upper="0.04" velocity="0.2"/>
+    <mimic joint="r_fr3_finger_joint1"/>
+    <dynamics damping="0.3"/>
+  </joint> 
 
 
 
@@ -899,5 +1019,125 @@
     <parent link="dual_arm_bulkhead_link"/>
     <child link="l_fr3_link0"/>
     <origin rpy="-0.785 0 0" xyz="0.145 0.15 0.135"/>
+  </joint>
+  <joint name="l_fr3_hand_joint" type="fixed">
+    <parent link="l_fr3_link8"/>
+    <child link="l_fr3_hand"/>
+    <origin rpy="0 0 -0.7853981633974483" xyz="0 0 0"/>
+  </joint>
+  <!-- sub-link defining detailed meshes for collision with environment -->
+  <link name="l_fr3_hand">
+    <visual name="l_fr3_hand_visual">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/hand.dae"/>
+      </geometry>
+    </visual>
+    <collision name="l_fr3_hand_collision">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/collision/hand.stl"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.01 0 0.03"/>
+      <mass value="0.73"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0025" iyz="0" izz="0.0017"/>
+    </inertial>
+  </link>
+  <!-- Define the hand_tcp frame -->
+  <link name="l_hand_tcp"/>
+  <joint name="l_hand_tcp_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.1034"/>
+    <parent link="l_fr3_hand"/>
+    <child link="l_hand_tcp"/>
+  </joint>
+  <link name="l_fr3_leftfinger">
+    <visual name="l_fr3_leftfinger_visual">
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/finger.dae"/>
+      </geometry>
+    </visual>
+    <!-- screw mount -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 18.5e-3 11e-3"/>
+      <geometry>
+        <box size="22e-3 15e-3 20e-3"/>
+      </geometry>
+    </collision>
+    <!-- cartriage sledge -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 6.8e-3 2.2e-3"/>
+      <geometry>
+        <box size="22e-3 8.8e-3 3.8e-3"/>
+      </geometry>
+    </collision>
+    <!-- diagonal finger -->
+    <collision>
+      <origin rpy="0.5235987755982988 0 0" xyz="0 15.9e-3 28.35e-3"/>
+      <geometry>
+        <box size="17.5e-3 7e-3 23.5e-3"/>
+      </geometry>
+    </collision>
+    <!-- rubber tip with which to grasp -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 7.58e-3 45.25e-3"/>
+      <geometry>
+        <box size="17.5e-3 15.2e-3 18.5e-3"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="l_fr3_rightfinger">
+    <visual name="l_fr3_rightfinger_visual">
+      <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="package://franka_description/meshes/robot_ee/franka_hand_white/visual/finger.dae"/>
+      </geometry>
+    </visual>
+    <!-- screw mount -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -18.5e-3 11e-3"/>
+      <geometry>
+        <box size="22e-3 15e-3 20e-3"/>
+      </geometry>
+    </collision>
+    <!-- cartriage sledge -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -6.8e-3 2.2e-3"/>
+      <geometry>
+        <box size="22e-3 8.8e-3 3.8e-3"/>
+      </geometry>
+    </collision>
+    <!-- diagonal finger -->
+    <collision>
+      <origin rpy="-0.5235987755982988 0 0" xyz="0 -15.9e-3 28.35e-3"/>
+      <geometry>
+        <box size="17.5e-3 7e-3 23.5e-3"/>
+      </geometry>
+    </collision>
+    <!-- rubber tip with which to grasp -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -7.58e-3 45.25e-3"/>
+      <geometry>
+        <box size="17.5e-3 15.2e-3 18.5e-3"/>
+      </geometry>
+    </collision>
+  </link>
+  <!-- <joint name="fr3_finger_joint1" type="prismatic"> -->
+  <joint name="l_fr3_finger_joint1" type="fixed">
+    <parent link="l_fr3_hand"/>
+    <child link="l_fr3_leftfinger"/>
+    <origin rpy="0 0 0" xyz="0 0 0.0584"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" lower="0.0" upper="0.04" velocity="0.2"/>
+    <dynamics damping="0.3"/>
+  </joint>
+  <!-- <joint name="fr3_finger_joint2" type="prismatic"> -->
+  <joint name="l_fr3_finger_joint2" type="fixed">
+    <parent link="l_fr3_hand"/>
+    <child link="l_fr3_rightfinger"/>
+    <origin rpy="0 0 0" xyz="0 0 0.0584"/>
+    <axis xyz="0 -1 0"/>
+    <limit effort="100" lower="0.0" upper="0.04" velocity="0.2"/>
+    <mimic joint="l_fr3_finger_joint1"/>
+    <dynamics damping="0.3"/>
   </joint>
 </robot>

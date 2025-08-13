@@ -13,6 +13,9 @@ find_package(OsqpEigen       REQUIRED)
 find_package(std_msgs        REQUIRED)
 find_package(geometry_msgs   REQUIRED)
 find_package(sensor_msgs     REQUIRED)
+find_package(nav_msgs        REQUIRED)
+find_package(trajectory_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 include(${mujoco_ros_sim_DIR}/MRSController.cmake)
 
@@ -22,15 +25,21 @@ mrs_add_controller(fr3_controller
 
 target_link_libraries(fr3_controller PUBLIC
                       pinocchio::pinocchio
-                      OsqpEigen::OsqpEigen)
+                      OsqpEigen::OsqpEigen
+                      Eigen3::Eigen)
 
 mrs_add_controller(husky_fr3_controller
                    src/husky_fr3_controller/controller.cpp
                    src/husky_fr3_controller/robot_data.cpp)
 
+# Link against mppi exported by ament (may be a plain library name)
+
 target_link_libraries(husky_fr3_controller PUBLIC
                       pinocchio::pinocchio
-                      OsqpEigen::OsqpEigen)
+                      OsqpEigen::OsqpEigen
+                      Eigen3::Eigen)
+
+# auto_target_husky_fr3_includes: ;
 
 mrs_add_controller(husky_dual_fr3_controller
                    src/husky_dual_fr3_controller/controller.cpp
@@ -38,7 +47,8 @@ mrs_add_controller(husky_dual_fr3_controller
 
 target_link_libraries(husky_dual_fr3_controller PUBLIC
                       pinocchio::pinocchio
-                      OsqpEigen::OsqpEigen)
+                      OsqpEigen::OsqpEigen
+                      Eigen3::Eigen)
 
 install(DIRECTORY robot/  DESTINATION share/${PROJECT_NAME}/robot)
 install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
@@ -52,7 +62,10 @@ ament_target_dependencies(fr3_controller PUBLIC
 ament_target_dependencies(husky_fr3_controller PUBLIC 
   std_msgs
   geometry_msgs
-  sensor_msgs)
+  sensor_msgs
+  nav_msgs
+  trajectory_msgs
+  visualization_msgs)
   
 ament_target_dependencies(husky_dual_fr3_controller PUBLIC 
   std_msgs

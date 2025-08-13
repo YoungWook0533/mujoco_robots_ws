@@ -6,6 +6,8 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory('dyros_robot_controller')
+
     sim_node = Node(
     package='mujoco_ros_sim',
     executable='mujoco_ros_sim',
@@ -14,30 +16,43 @@ def generate_launch_description():
     parameters=[
         {'robot_name': 'fr3_husky'},
         {'controller_class': 'dyros_robot_controller.HuskyFR3Controller'},
+        # Use external MPPI bridge
+        {'use_external_mppi': True},
     ],
 )
 
     urdf_path = os.path.join(
-        get_package_share_directory('dyros_robot_controller'),
+        pkg_share,
         'robot', 'husky_fr3_vis.urdf')
     with open(urdf_path, 'r') as infp:
         robot_description = infp.read()
-    # moveit_config_path = get_package_share_directory('husky_fr3_moveit_config')
-    # moveit_config = (
-    #     MoveItConfigsBuilder("husky_fr3")
-    #     .robot_description(file_path=urdf_path)
-    #     .robot_description_semantic(
-    #         file_path=os.path.join(moveit_config_path, "config", "husky_fr3.srdf"))
-    #     .planning_scene_monitor(
-    #         publish_robot_description=True,
-    #         publish_robot_description_semantic=True
-    #     )
-    #     .to_moveit_configs()
-    # )
+
     rviz_config_file = os.path.join(
-        get_package_share_directory("dyros_robot_controller"),
+        pkg_share,
         "rviz", 
         "husky_fr3_rviz.rviz"
+    )
+
+    # External MPPI node
+    mppi_config_path = os.path.join(pkg_share, 'config', 'mppi_husky_fr3.yaml')
+    mppi_node = Node(
+        package='mppi_ros',
+        executable='husky_fr3_mppi_node',
+        name='husky_fr3_mppi',
+        output='screen',
+        parameters=[
+            # Required by ControllerRos
+            {'policy_update_rate': 30.0},
+            {'reference_update_rate': 30.0},
+            {'ros_publish_rate': 10.0},
+            {'publish_ros': True},
+            # Husky+FR3 specifics
+            {'dt': 0.01},
+            {'mppi_config_path': mppi_config_path},
+            {'urdf_path': os.path.join(pkg_share, 'robot', 'husky_fr3.urdf')},
+            {'goal_topic': 'husky_fr3_controller/target_pose'},
+            {'observation_topic': 'husky_fr3_controller/mppi_observation'},
+        ]
     )
 
     robot_state_publisher = Node(
@@ -77,6 +92,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         sim_node,
+        mppi_node,
         robot_state_publisher,
         joint_state_publisher,
         rviz_node,
