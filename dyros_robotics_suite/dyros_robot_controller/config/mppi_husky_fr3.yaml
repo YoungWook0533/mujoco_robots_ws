@@ -24,7 +24,7 @@ solver:
   u_max: [ 1.0,  2.0,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5]
 
   filtering: true
-  filters_window: [7,7,7,7,7,7,7,7,7]
+  filters_window: [10,10,10,10,10,10,10,10,10]
   filters_order:  [1,1,1,1,1,1,1,1,1]
 
   threads: 8

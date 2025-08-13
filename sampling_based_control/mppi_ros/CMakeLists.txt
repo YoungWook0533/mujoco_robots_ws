@@ -16,6 +16,7 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(mppi_pinocchio REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # Messages
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -61,7 +62,8 @@ if(OpenMP_CXX_FOUND)
   target_link_libraries(mppi_ros_lib OpenMP::OpenMP_CXX)
 endif()
 
-target_link_libraries(mppi_ros_lib mppi_threading)
+# Link external non-ament libraries
+target_link_libraries(mppi_ros_lib mppi_threading yaml-cpp pinocchio::pinocchio)
 
 rosidl_get_typesupport_target(typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 if(typesupport_target)

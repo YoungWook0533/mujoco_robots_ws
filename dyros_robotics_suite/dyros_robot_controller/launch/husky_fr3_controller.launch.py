@@ -35,6 +35,7 @@ def generate_launch_description():
 
     # External MPPI node
     mppi_config_path = os.path.join(pkg_share, 'config', 'mppi_husky_fr3.yaml')
+    cost_config_path = os.path.join(pkg_share, 'config', 'mppi_cost_husky_fr3.yaml')
     mppi_node = Node(
         package='mppi_ros',
         executable='husky_fr3_mppi_node',
@@ -49,6 +50,7 @@ def generate_launch_description():
             # Husky+FR3 specifics
             {'dt': 0.01},
             {'mppi_config_path': mppi_config_path},
+            {'cost_config_path': cost_config_path},
             {'urdf_path': os.path.join(pkg_share, 'robot', 'husky_fr3.urdf')},
             {'goal_topic': 'husky_fr3_controller/target_pose'},
             {'observation_topic': 'husky_fr3_controller/mppi_observation'},

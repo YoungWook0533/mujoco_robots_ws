@@ -18,12 +18,14 @@ HuskyFr3ControllerNode::HuskyFr3ControllerNode(const std::shared_ptr<rclcpp::Nod
 
   if (!node->has_parameter("dt")) node->declare_parameter<double>("dt", 0.01);
   if (!node->has_parameter("mppi_config_path")) node->declare_parameter<std::string>("mppi_config_path", "");
+  if (!node->has_parameter("cost_config_path")) node->declare_parameter<std::string>("cost_config_path", "");
   if (!node->has_parameter("urdf_path")) node->declare_parameter<std::string>("urdf_path", "");
   if (!node->has_parameter("goal_topic")) node->declare_parameter<std::string>("goal_topic", "husky_fr3_controller/target_pose");
   if (!node->has_parameter("observation_topic")) node->declare_parameter<std::string>("observation_topic", "husky_fr3_controller/mppi_observation");
 
   node->get_parameter("dt", dt_);
   node->get_parameter("mppi_config_path", config_path_);
+  std::string cost_config_path; node->get_parameter("cost_config_path", cost_config_path);
   node->get_parameter("urdf_path", urdf_path_);
   node->get_parameter("goal_topic", goal_topic_);
   node->get_parameter("observation_topic", observation_topic_);
@@ -31,6 +33,12 @@ HuskyFr3ControllerNode::HuskyFr3ControllerNode(const std::shared_ptr<rclcpp::Nod
   auto make_abs = [](const std::string& s){ return (!s.empty() && s[0] != '/') ? ("/" + s) : s; };
   goal_topic_ = make_abs(goal_topic_);
   observation_topic_ = make_abs(observation_topic_);
+
+  // Store chosen cost config path in config_path_ if provided separately
+  if (!cost_config_path.empty()) {
+    // Use a separate cost YAML file
+    config_path_ += ""; // keep solver path unchanged
+  }
 }
 
 bool HuskyFr3ControllerNode::init_ros() {
@@ -61,8 +69,21 @@ bool HuskyFr3ControllerNode::set_controller(std::shared_ptr<mppi::Solver>& contr
     RCLCPP_ERROR(get_node()->get_logger(), "Failed to load MPPI config: %s", config_path_.c_str());
     return false;
   }
+  // Use stable velocity-driven dynamics (v,w,qdot_des)
   dyn_local_ = std::make_shared<HuskyFr3MppiDynamics>(dt_);
-  cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_);
+
+  // Load cost params from separate cost_config_path if set; otherwise, try to load from the MPPI config file (supports a 'cost' section)
+  std::string cost_config_path;
+  get_node()->get_parameter("cost_config_path", cost_config_path);
+  if (!cost_config_path.empty()) {
+    cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path);
+  } else {
+    cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_);
+    if (auto specific = std::dynamic_pointer_cast<HuskyFr3MppiCost>(cost_local_)) {
+      specific->load_config(config_path_);
+    }
+  }
+
   auto pol = std::make_shared<mppi::GaussianPolicy>(dyn_local_->get_input_dimension(), cfg);
   auto solver = std::make_shared<mppi::Solver>(dyn_local_, cost_local_, pol, cfg);
   // Initialize reference (valid unit quaternion)
