@@ -28,5 +28,5 @@ source install/setup.bash
 ```
 ## Run
 ```
-ros2 launch dyros_robot_controller fr3_controller.launch.py  # see launch directory for more options
+ros2 launch dyros_robot_controller fr3_controller.launch.py  # or any other controllers
 ```
