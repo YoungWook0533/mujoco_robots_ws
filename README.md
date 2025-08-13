@@ -16,9 +16,13 @@ pip install mujoco-py
 - [OSQP](https://osqp.org/docs/get_started/sources.html)
 - [OSQP-Eigen](https://github.com/robotology/osqp-eigen)
 - Scipy >= 14.0
-- anytry:
+- anytree:
 ```
 pip install anytree
+```
+### sampling_based_control
+```
+sudo apt-get install libyaml-cpp-dev libglfw3-dev
 ```
 ## Build
 ```
