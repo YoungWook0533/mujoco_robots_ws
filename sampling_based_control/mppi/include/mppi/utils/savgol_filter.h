@@ -110,9 +110,19 @@ struct MovingExtendedWindow {
    */
   std::vector<double> extract(const double t) {
     auto lower = std::lower_bound(
-        tt.begin(), tt.end(), t);  // index to the first element larger than t
-    assert(lower != tt.end());
-    size_t idx = std::distance(tt.begin(), lower);
+        tt.begin(), tt.end(), t);  // index to the first element larger or equal to t
+    size_t idx;
+    if (lower == tt.end()) {
+      // If t is beyond the last timestamp, use the last valid index
+      idx = tt.size() - 1;
+    } else {
+      idx = static_cast<size_t>(std::distance(tt.begin(), lower));
+    }
+
+    // Clamp center index to stay within [window, size - window - 1]
+    if (idx < static_cast<size_t>(window)) idx = static_cast<size_t>(window);
+    size_t max_center = uu.size() - static_cast<size_t>(window) - 1;
+    if (idx > max_center) idx = max_center;
 
     return std::vector<double>(uu.begin() + idx - window,
                                uu.begin() + idx + window + 1);
@@ -120,9 +130,17 @@ struct MovingExtendedWindow {
 
   void set(const double u, const double t) {
     auto upper = std::upper_bound(
-        tt.begin(), tt.end(), t);  // index to the first element larger than t
-    assert(upper != tt.end());
-    size_t idx = std::distance(tt.begin(), upper) - 1;
+        tt.begin(), tt.end(), t);  // index to the first element greater than t
+    size_t idx;
+    if (upper == tt.end()) {
+      // If no element is greater than t, update the last element
+      idx = uu.size() - 1;
+    } else {
+      size_t d = static_cast<size_t>(std::distance(tt.begin(), upper));
+      idx = (d == 0) ? 0 : d - 1;  // safe when upper points to the first element
+    }
+    // Final clamp for safety
+    if (idx >= uu.size()) idx = uu.size() - 1;
     uu[idx] = u;
   }
 

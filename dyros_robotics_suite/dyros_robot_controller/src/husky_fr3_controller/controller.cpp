@@ -57,7 +57,7 @@ namespace HuskyFR3Controller
 
     Controller::~Controller()
     {
-        // no internal MPPI threads to join
+
     }
 
     void Controller::starting()
@@ -344,7 +344,7 @@ namespace HuskyFR3Controller
                 for (int i=0;i<7;++i) qdot_mani_desired_(i) = u_ext(2+i);
 
                 // velocity damping control + gravity
-                Vector7d Kv; Kv.setConstant(40.0);
+                Vector7d Kv; Kv.setConstant(10.0);
                 Vector7d v_err = (qdot_mani_desired_ - qdot_mani_);
                 Vector7d tau = (robot_->getMassMatrixActuated()).block(0,0,7,7) * (Kv.asDiagonal() * v_err)
                                + (robot_->getGravityActuated()).segment(0,7);

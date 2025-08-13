@@ -42,9 +42,9 @@ def generate_launch_description():
         output='screen',
         parameters=[
             # Required by ControllerRos
-            {'policy_update_rate': 30.0},
-            {'reference_update_rate': 30.0},
-            {'ros_publish_rate': 10.0},
+            {'policy_update_rate': 20.0},
+            {'reference_update_rate': 10.0},
+            {'ros_publish_rate': 20.0},
             {'publish_ros': True},
             # Husky+FR3 specifics
             {'dt': 0.01},

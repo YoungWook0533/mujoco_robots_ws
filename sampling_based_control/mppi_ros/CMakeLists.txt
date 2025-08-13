@@ -37,10 +37,13 @@ add_library(mppi_threading
   src/threading/WorkerManager.cpp
 )
 
-add_library(mppi_ros_lib
+add_library(mppi_ros_lib STATIC
   src/controller_interface.cpp
   src/conversions.cpp
   src/ros_params.cpp
+  src/husky_fr3/dynamics.cpp
+  src/husky_fr3/cost.cpp
+  src/husky_fr3/node.cpp
 )
 
 ament_target_dependencies(mppi_ros_lib
@@ -50,6 +53,7 @@ ament_target_dependencies(mppi_ros_lib
   std_msgs
   geometry_msgs
   rclcpp
+  mppi_pinocchio
 )
 
 if(OpenMP_CXX_FOUND)
@@ -68,6 +72,11 @@ add_executable(husky_fr3_mppi_node src/husky_fr3_mppi_node.cpp)
 ament_target_dependencies(husky_fr3_mppi_node rclcpp geometry_msgs std_msgs mppi mppi_pinocchio)
 # Link to our libs and mppi core (mppi_pinocchio will be linked via ament_target_dependencies)
 # Note: order matters on some linkers
+# Also link pinocchio transitive includes from mppi_pinocchio
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(mppi_ros_lib OpenMP::OpenMP_CXX)
+endif()
+
 target_link_libraries(husky_fr3_mppi_node mppi_ros_lib mppi::mppi)
 
 install(

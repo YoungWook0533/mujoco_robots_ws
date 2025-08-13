@@ -23,11 +23,11 @@ solver:
   u_min: [-1.0, -2.0, -1.5, -1.5, -1.5, -1.5, -1.5, -1.5, -1.5]
   u_max: [ 1.0,  2.0,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5,  1.5]
 
-  filtering: false
+  filtering: true
   filters_window: [7,7,7,7,7,7,7,7,7]
   filters_order:  [1,1,1,1,1,1,1,1,1]
 
-  threads: 16
+  threads: 8
   logging: false
 
   spline_degree: 3
