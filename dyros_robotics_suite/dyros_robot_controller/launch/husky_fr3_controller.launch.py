@@ -33,7 +33,7 @@ def generate_launch_description():
         'robot', 'husky_fr3.urdf')
     srdf_path = os.path.join(
         pkg_share,
-        'robot', 'fr3_husky.srdf')
+        'robot', 'husky_fr3.srdf')
 
     rviz_config_file = os.path.join(
         pkg_share,

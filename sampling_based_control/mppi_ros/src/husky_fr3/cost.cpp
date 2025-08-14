@@ -3,6 +3,7 @@
 #include <sstream>
 #include <yaml-cpp/yaml.h>
 #include <iostream>
+#include <filesystem>
 
 namespace husky_fr3_mppi_ros {
 
@@ -13,34 +14,30 @@ HuskyFr3MppiCost::HuskyFr3MppiCost(const std::string& urdf_path, const std::stri
   std::stringstream buffer; buffer << file.rdbuf();
   urdf_xml_ = buffer.str();
   robot_model_.init_from_xml(urdf_xml_);
-  // Defaults similar to before (will be overridden by YAML)
-  params_.upper_limits = (Eigen::VectorXd(7) << 2.8973, 1.7628, 2.8973, 3.0718, 2.8973, 3.7525, 2.8973).finished();
-  params_.lower_limits = -params_.upper_limits;
-  params_.ee_frame = "fr3_link8";
-  params_.arm_dof = 7;
-  params_.wheel_dof = 2;
+  robot_model_.set_urdf_path(urdf_path_);
   u_prev_.setZero(params_.arm_dof + params_.wheel_dof);
   q_pin_buf_.resize(params_.arm_dof + params_.wheel_dof);
   q_pin_buf_.setZero();
-
-  // Always load YAML config; user guaranteed to provide a valid path
   if (!cost_config_path.empty()) {
     load_config(cost_config_path);
-    // resize u_prev_ and buffer according to possibly updated dofs
     u_prev_.setZero(params_.arm_dof + params_.wheel_dof);
     q_pin_buf_.resize(params_.arm_dof + params_.wheel_dof);
     q_pin_buf_.setZero();
   }
-
-  // Initialize collision models from SRDF provided
   set_srdf_path(srdf_path);
 }
 
 HuskyFr3MppiCost::HuskyFr3MppiCost(const HuskyFr3MppiCost& o)
   : params_(o.params_), u_prev_(o.u_prev_), q_pin_buf_(o.q_pin_buf_), urdf_path_(o.urdf_path_), urdf_xml_(o.urdf_xml_) {
   robot_model_.init_from_xml(urdf_xml_);
+  robot_model_.set_urdf_path(urdf_path_);
   if (!o.params_.srdf_path.empty()) {
-    robot_model_.init_geometry_from_srdf(o.params_.srdf_path);
+    // Attempt pkg-based geometry init first
+    std::filesystem::path p(urdf_path_);
+    std::string pkg_root = p.parent_path().parent_path().string();
+    if (!robot_model_.init_geometry_from_srdf(o.params_.srdf_path, pkg_root)) {
+      robot_model_.init_geometry_from_srdf(o.params_.srdf_path);
+    }
   } else {
     robot_model_.init_geometry_from_srdf();
   }
@@ -63,7 +60,8 @@ bool HuskyFr3MppiCost::load_config(const std::string& yaml_path) {
     getd("reach_weight", params_.reach_weight);
     getd("max_reach", params_.max_reach);
     getd("min_dist", params_.min_dist);
-    getd("self_collision_weight", params_.self_collision_weight);
+    getd("collision_weight", params_.Q_collision);
+    getd("collision_threshold", params_.collision_threshold);
 
     if (cost["srdf_path"]) params_.srdf_path = cost["srdf_path"].as<std::string>();
 
@@ -103,19 +101,21 @@ void HuskyFr3MppiCost::set_srdf_path(const std::string& srdf_path) {
 }
 
 void HuskyFr3MppiCost::init_collision_models() {
-  // Delegate geometry init to the wrapper; SRDF optional
+  std::filesystem::path p(urdf_path_);
+  std::string pkg_root = p.parent_path().parent_path().string();
+  bool ok = false;
   if (!params_.srdf_path.empty()) {
-    robot_model_.init_geometry_from_srdf(params_.srdf_path);
+    ok = robot_model_.init_geometry_from_srdf(params_.srdf_path, pkg_root);
+    if (!ok) {
+      std::cerr << "[HuskyFr3MppiCost] Geometry init with package root failed: " << pkg_root << " trying XML variant." << std::endl;
+      ok = robot_model_.init_geometry_from_srdf(params_.srdf_path);
+    }
   } else {
-    robot_model_.init_geometry_from_srdf();
+    ok = robot_model_.init_geometry_from_srdf();
   }
-}
-
-double HuskyFr3MppiCost::self_collision_cost() {
-  if (params_.self_collision_weight <= 0.0) return 0.0;
-  robot_model_.update_geometry();
-  const std::size_t n = robot_model_.count_self_collisions();
-  return params_.self_collision_weight * static_cast<double>(n);
+  if (!ok) {
+    std::cerr << "[HuskyFr3MppiCost] Failed to initialize collision geometry. URDF path: " << urdf_path_ << " SRDF: " << params_.srdf_path << std::endl;
+  }
 }
 
 void HuskyFr3MppiCost::ensure_u_prev_size(const mppi::input_t& u) {
@@ -183,7 +183,10 @@ mppi::cost_t HuskyFr3MppiCost::compute_cost(const mppi::observation_t& x, const 
   }
 
   // Self-collision penalty
-  cost += self_collision_cost();
+  auto res = robot_model_.compute_min_distance(q_pin_buf_, nullptr, false, false, false);
+  if (res.distance < params_.collision_threshold) {
+    cost += params_.Q_collision * std::pow(std::max(0.0, params_.collision_threshold - res.distance), 2);
+  }
 
   // Input regularization
   cost += params_.regularization * u.squaredNorm();

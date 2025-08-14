@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This does not replace URDF, and is not an extension of URDF.
+    This is a format for representing semantic information about the robot structure.
+    A URDF file must exist for this robot as well, where the joints and the links that are referenced are defined
+-->
+<robot name="husky_fr3">
+    <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
+    <!-- <disable_collisions link1="base_link" link2="fr3_link7" reason="Adjacent"/> -->
+    <disable_collisions link1="base_link" link2="top_structure_link" reason="Adjacent"/>
+</robot>

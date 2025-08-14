@@ -10,6 +10,7 @@
 #include <Eigen/Geometry>
 #include <memory>
 #include <string>
+#include <limits>
 
 // Geometry & SRDF support
 #include <pinocchio/multibody/model.hpp>
@@ -33,6 +34,16 @@ class RobotModel {
  public:
   using Vector6d = Eigen::Matrix<double, 6, 1>;
 
+  struct MinDistResult {
+    double distance{std::numeric_limits<double>::infinity()};
+    Eigen::VectorXd grad;      // dq of distance (size = nq)
+    Eigen::VectorXd grad_dot;  // d/dt grad (size = nq)
+    int pair_index{-1};
+    std::string link1;
+    std::string link2;
+    void setZero(int nq) { grad.setZero(nq); grad_dot.setZero(nq); }
+  };
+
   RobotModel() = default;
   ~RobotModel();
 
@@ -47,6 +58,9 @@ class RobotModel {
    * Optionally apply SRDF to disable collision pairs/reference configs.
    */
   bool init_geometry_from_srdf(const std::string& srdf_path = std::string());
+  bool init_geometry_from_srdf(const std::string& srdf_path, const std::string& packages_path);
+
+  void set_urdf_path(const std::string& p) { urdf_path_file_ = p; }
 
   /** Update kinematics only */
   void update_state(const Eigen::VectorXd& q);
@@ -58,6 +72,13 @@ class RobotModel {
 
   /** Count current self-collision pairs (after update_geometry) */
   std::size_t count_self_collisions() const;
+
+  /** Minimum distance among all enabled collision pairs (requires update_geometry). Returns +inf if no pairs. */
+  double min_distance_self() const;
+
+  /** Full minimum distance computation with optional gradients (recomputes distances). */
+  MinDistResult compute_min_distance(const Eigen::VectorXd& q, const Eigen::VectorXd* qdot = nullptr,
+                                     bool with_grad = false, bool with_graddot = false, bool verbose = false) const;  // now uses caching
 
   /** Return nq (configuration vector size) */
   int nq() const;
@@ -85,5 +106,18 @@ class RobotModel {
 
   // Cached URDF XML to rebuild geometry
   std::string urdf_xml_;
+  std::string urdf_path_file_;
+
+  // Caching
+  mutable Eigen::VectorXd q_cache_;
+  mutable bool kinematics_valid_ {false};
+  mutable bool geometry_valid_ {false};
+  mutable bool joint_jacobians_valid_ {false};
+
+  // New caching-aware API
+  void update_kinematics(const Eigen::VectorXd& q);  // forward kinematics + frame placements (no geometry)
+  void update_geometry_cached();                     // geometry placements only (requires kinematics valid)
+  // Lightweight distance query assuming caches valid; called internally
+  double min_distance_self_cached() const;
 };
 }  // namespace mppi_pinocchio

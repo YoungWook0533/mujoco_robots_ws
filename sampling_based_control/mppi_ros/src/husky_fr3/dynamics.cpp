@@ -16,14 +16,14 @@ mppi::dynamics_ptr HuskyFr3MppiDynamics::clone() const { return std::make_shared
 
 void HuskyFr3MppiDynamics::reset(const mppi::observation_t& x, const double t) { x_ = x; t_ = t; }
 
+// Step the kinematics forward with input u
 mppi::observation_t HuskyFr3MppiDynamics::step(const mppi::input_t& u, const double) {
   const double v = u(0); const double w = u(1);
   double x = x_(0), y = x_(1), yaw = x_(2);
   Eigen::VectorXd q = x_.segment(3,7);
   Eigen::VectorXd qdot = x_.segment(10,7);
   Eigen::VectorXd qdot_des = u.segment(2,7);
-  const double alpha = 1.0; // no lag
-  qdot = (1.0 - alpha) * qdot + alpha * qdot_des;
+  qdot = qdot_des;
   q += qdot * dt;
   x += v * std::cos(yaw) * dt; y += v * std::sin(yaw) * dt; yaw += w * dt;
   mppi::observation_t xn = x_;

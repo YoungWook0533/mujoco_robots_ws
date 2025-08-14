@@ -17,6 +17,7 @@ find_package(OpenMP REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(mppi_pinocchio REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 # Messages
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -55,6 +56,7 @@ ament_target_dependencies(mppi_ros_lib
   geometry_msgs
   rclcpp
   mppi_pinocchio
+  ament_index_cpp
 )
 
 if(OpenMP_CXX_FOUND)
@@ -71,7 +73,7 @@ if(typesupport_target)
 endif()
 
 add_executable(husky_fr3_mppi_node src/husky_fr3_mppi_node.cpp)
-ament_target_dependencies(husky_fr3_mppi_node rclcpp geometry_msgs std_msgs mppi mppi_pinocchio)
+ament_target_dependencies(husky_fr3_mppi_node rclcpp geometry_msgs std_msgs mppi mppi_pinocchio ament_index_cpp)
 # Link to our libs and mppi core (mppi_pinocchio will be linked via ament_target_dependencies)
 # Note: order matters on some linkers
 # Also link pinocchio transitive includes from mppi_pinocchio

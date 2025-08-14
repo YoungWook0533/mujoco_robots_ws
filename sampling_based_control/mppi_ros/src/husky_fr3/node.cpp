@@ -86,6 +86,7 @@ bool HuskyFr3ControllerNode::set_controller(std::shared_ptr<mppi::Solver>& contr
     return false;
   }
   cost_local_ = std::make_shared<HuskyFr3MppiCost>(urdf_path_, cost_config_path, srdf_path_);
+  // Geometry initialization now handled internally in cost (derives package path from SRDF)
 
   auto pol = std::make_shared<mppi::GaussianPolicy>(dyn_local_->get_input_dimension(), cfg);
   auto solver = std::make_shared<mppi::Solver>(dyn_local_, cost_local_, pol, cfg);

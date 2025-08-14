@@ -18,9 +18,11 @@ struct CostParams {
   double max_reach;         // meters, configurable via YAML
   double min_dist;          // optional minimum distance (meters)
 
-  // Self-collision
-  double self_collision_weight{0.0}; // penalty added per colliding pair
   std::string srdf_path;              // SRDF path for disabled pairs and groups
+
+  // Distance-based self collision parameters
+  double Q_collision{0.0};            // weight
+  double collision_threshold{0.0};    // activate penalty if min distance < threshold
 
   // Joint limits
   Eigen::VectorXd lower_limits; // size 7
@@ -56,7 +58,6 @@ private:
 
   // Collision helpers (implemented using mppi_pinocchio::RobotModel)
   void init_collision_models();
-  double self_collision_cost();
 
   mppi_pinocchio::RobotModel robot_model_; // per-instance (FK and collisions)
   CostParams params_;

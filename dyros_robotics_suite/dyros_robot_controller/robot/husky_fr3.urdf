@@ -53,12 +53,12 @@
       <origin xyz="0 0 0"/>
       <inertia ixx="0.02467" ixy="0" ixz="0" iyy="0.04411" iyz="0" izz="0.02467"/>
     </inertial>
-    <collision>
+    <!-- <collision>
       <origin rpy="1.570795 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder length="0.1143" radius="0.1651"/>
       </geometry>
-    </collision>
+    </collision> -->
   </link>
 
   <!-- Pinocchio takes 'continuous' type as nv=2 -->
@@ -76,12 +76,12 @@
       <origin xyz="0 0 0"/>
       <inertia ixx="0.02467" ixy="0" ixz="0" iyy="0.04411" iyz="0" izz="0.02467"/>
     </inertial>
-    <collision>
+    <!-- <collision>
       <origin rpy="1.570795 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder length="0.1143" radius="0.1651"/>
       </geometry>
-    </collision>
+    </collision> -->
   </link>
 
   <joint name="front_right_wheel" type="revolute">
@@ -218,12 +218,12 @@
         <mesh filename="package://husky_description/meshes/top_plate.dae" />
       </geometry>
     </visual>
-    <collision>
+    <!-- <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="package://husky_description/meshes/top_plate.stl" />
       </geometry>
-    </collision>
+    </collision> -->
   </link>
 
   <joint name="top_plate_joint" type="fixed">
@@ -288,11 +288,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link0.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link0_collision">
+    <!-- <collision name="fr3_link0_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link0.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <inertial>
       <origin rpy="0 0 0" xyz="-0.0172 0.0004 0.0745"/>
       <mass value="2.3966"/>
@@ -306,11 +306,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link1.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link1_collision">
+    <!-- <collision name="fr3_link1_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link1.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="0.0000004128 -0.0181251324 -0.0386035970"/>
@@ -340,11 +340,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link2.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link2_collision">
+    <!-- <collision name="fr3_link2_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link2.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="0.0031828864 -0.0743221644 0.0088146084"/>
@@ -374,11 +374,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link3.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link3_collision">
+    <!-- <collision name="fr3_link3_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link3.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="0.0407015686 -0.0048200565 -0.0289730823"/>
@@ -408,11 +408,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link4.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link4_collision">
+    <!-- <collision name="fr3_link4_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link4.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="-0.0459100965 0.0630492960 -0.0085187868"/>
@@ -442,11 +442,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link5.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link5_collision">
+    <!-- <collision name="fr3_link5_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link5.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="-0.0016039605 0.0292536262 -0.0972965990"/>
@@ -476,11 +476,11 @@
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/visual/link6.dae"/>
       </geometry>
     </visual>
-    <collision name="fr3_link6_collision">
+    <!-- <collision name="fr3_link6_collision">
       <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link6.stl"/>
       </geometry>
-    </collision>
+    </collision> -->
     <!-- ===================================================== -->
     <inertial>
       <origin rpy="0 0 0" xyz="0.0597131221 -0.0410294666 -0.0101692726"/>
@@ -511,8 +511,12 @@
       </geometry>
     </visual>
     <collision name="fr3_link7_collision">
-      <geometry>
+      <!-- <geometry>
         <mesh filename="package://franka_description/meshes/robot_arms/fr3/collision/link7.stl"/>
+      </geometry> -->
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
       </geometry>
     </collision>
     <!-- ===================================================== -->
